@@ -31,8 +31,5 @@
     "test": "ava",
     "universal": "napi universal",
     "version": "napi version"
-  },
-  "optionalDependencies": {
-    "@esfuse/compiler-darwin-x64": "0.0.0"
   }
 }
