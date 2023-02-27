@@ -13,7 +13,7 @@ mod visitor;
 extern crate napi_derive;
 
 #[napi]
-pub fn sum(filename_str: String, code_str: String) -> String {
+pub fn transform(filename_str: String, code_str: String) -> String {
   let cm = Arc::<SourceMap>::default();
   let c = swc::Compiler::new(cm.clone());
 

@@ -10,7 +10,8 @@
       "additional": [
         "x86_64-apple-darwin"
       ]
-    }
+    },
+    "npmClient": "yarn"
   },
   "license": "MIT",
   "devDependencies": {
@@ -27,9 +28,11 @@
     "artifacts": "napi artifacts",
     "build": "napi build --platform --release",
     "build:debug": "napi build --platform",
-    "prepublishOnly": "napi prepublish -t npm",
     "test": "ava",
     "universal": "napi universal",
     "version": "napi version"
+  },
+  "optionalDependencies": {
+    "@esfuse/compiler-darwin-x64": "0.0.0"
   }
 }

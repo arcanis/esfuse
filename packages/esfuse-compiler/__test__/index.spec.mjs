@@ -1,7 +1,11 @@
-import test from 'ava'
+import test from 'ava';
 
-import { sum } from '../index.js'
+import {transform} from '../index.js';
 
-test('sum from native', (t) => {
-  t.is(sum(`1`, `2`), `12`)
-})
+test('simple transform', (t) => {
+  t.is(transform(`file.ts`, `console.log('foo');`), [
+    `$esfuse$.define("<file.ts>", (module, exports, require)=>{\n`,
+    `    console.log("foo");\n`,
+    `});\n`,
+  ].join(``));
+});
