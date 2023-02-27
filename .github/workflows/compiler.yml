@@ -93,7 +93,7 @@ jobs:
   compiler-test-macOS-windows-binding:
     name: Compiler test - ${{matrix.settings.target}} - node@${{matrix.node}}
     needs:
-      - build
+      - compiler-build
     strategy:
       fail-fast: false
       matrix:
@@ -130,7 +130,7 @@ jobs:
     name: Compiler publish
     runs-on: ubuntu-latest
     needs:
-      - test-macOS-windows-binding
+      - compiler-test-macOS-windows-binding
     steps:
       - uses: actions/checkout@v3
       - name: Setup node
