@@ -8,6 +8,7 @@
     "triples": {
       "defaults": false,
       "additional": [
+        "aarch64-apple-darwin",
         "x86_64-apple-darwin"
       ]
     },
@@ -22,12 +23,13 @@
     "timeout": "3m"
   },
   "engines": {
-    "node": ">= 10"
+    "node": ">=10"
   },
   "scripts": {
     "artifacts": "napi artifacts",
     "build": "napi build --platform --release",
     "build:debug": "napi build --platform",
+    "prepublishOnly": "napi prepublish -t npm --skip-gh-release",
     "test": "ava",
     "universal": "napi universal",
     "version": "napi version"
