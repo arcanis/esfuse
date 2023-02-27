@@ -23,6 +23,11 @@ jobs:
             build: |
               yarn packages/esfuse-compiler build
               strip -x packages/esfuse-compiler/*.node
+          - host: macos-latest
+            target: aarch64-apple-darwin
+            build: |
+              yarn packages/esfuse-compiler build
+              strip -x packages/esfuse-compiler/*.node
     name: Compiler build - ${{matrix.settings.target}} - node@18
     runs-on: ${{matrix.settings.host}}
     steps:
@@ -90,7 +95,7 @@ jobs:
           path: packages/esfuse-compiler/${{env.APP_NAME}}.*.node
           if-no-files-found: error
 
-  compiler-test-macOS-windows-binding:
+  compiler-tests:
     name: Compiler test - ${{matrix.settings.target}} - node@${{matrix.node}}
     needs:
       - compiler-build
@@ -133,7 +138,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: npm
     needs:
-      - compiler-test-macOS-windows-binding
+      - compiler-tests
     steps:
       - uses: actions/checkout@v3
       - name: Setup node
