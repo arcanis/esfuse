@@ -7,6 +7,9 @@
   "cpu": [
     "x64"
   ],
+  "libc": [
+    "glibc"
+  ],
   "main": "compiler.linux-x64-gnu.node",
   "files": [
     "compiler.linux-x64-gnu.node"
@@ -15,10 +18,10 @@
   "engines": {
     "node": ">= 10"
   },
-  "libc": [
-    "glibc"
-  ],
   "scripts": {
     "publish": "yarn npm publish"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

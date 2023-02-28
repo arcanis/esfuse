@@ -31,5 +31,8 @@
     "test": "ava",
     "universal": "napi universal",
     "version": "napi version"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

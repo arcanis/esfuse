@@ -17,5 +17,8 @@
   },
   "scripts": {
     "publish": "yarn npm publish"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
