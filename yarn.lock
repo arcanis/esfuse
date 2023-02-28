@@ -5,6 +5,30 @@ __metadata:
   version: 6
   cacheKey: 8
 
+"@esfuse/compiler-darwin-arm64@workspace:packages/esfuse-compiler/npm/darwin-arm64":
+  version: 0.0.0-use.local
+  resolution: "@esfuse/compiler-darwin-arm64@workspace:packages/esfuse-compiler/npm/darwin-arm64"
+  languageName: unknown
+  linkType: soft
+
+"@esfuse/compiler-darwin-x64@workspace:packages/esfuse-compiler/npm/darwin-x64":
+  version: 0.0.0-use.local
+  resolution: "@esfuse/compiler-darwin-x64@workspace:packages/esfuse-compiler/npm/darwin-x64"
+  languageName: unknown
+  linkType: soft
+
+"@esfuse/compiler-linux-x64-gnu@workspace:packages/esfuse-compiler/npm/linux-x64-gnu":
+  version: 0.0.0-use.local
+  resolution: "@esfuse/compiler-linux-x64-gnu@workspace:packages/esfuse-compiler/npm/linux-x64-gnu"
+  languageName: unknown
+  linkType: soft
+
+"@esfuse/compiler-win32-x64-msvc@workspace:packages/esfuse-compiler/npm/win32-x64-msvc":
+  version: 0.0.0-use.local
+  resolution: "@esfuse/compiler-win32-x64-msvc@workspace:packages/esfuse-compiler/npm/win32-x64-msvc"
+  languageName: unknown
+  linkType: soft
+
 "@esfuse/compiler@workspace:packages/esfuse-compiler":
   version: 0.0.0-use.local
   resolution: "@esfuse/compiler@workspace:packages/esfuse-compiler"
