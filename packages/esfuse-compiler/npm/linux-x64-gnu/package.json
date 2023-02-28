@@ -17,5 +17,8 @@
   },
   "libc": [
     "glibc"
-  ]
+  ],
+  "scripts": {
+    "publish": "yarn npm publish"
+  }
 }

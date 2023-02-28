@@ -157,7 +157,7 @@ jobs:
       - name: Download all artifacts
         uses: actions/download-artifact@v3
         with:
-          path: artifacts
+          path: packages/esfuse-compiler/artifacts
       - name: Move artifacts
         run: yarn packages/esfuse-compiler artifacts
       - name: Publish
