@@ -23,10 +23,20 @@ jobs:
             build: |
               yarn packages/esfuse-compiler build
               strip -x packages/esfuse-compiler/*.node
+          - host: windows-latest
+            build: yarn packages/esfuse-compiler build
+            target: x86_64-pc-windows-msvc
+          - host: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian
+            build: |-
+              set -e &&
+              yarn packages/esfuse-compiler build --target x86_64-unknown-linux-gnu &&
+              strip packages/esfuse-compiler/*.node
           - host: macos-latest
             target: aarch64-apple-darwin
             build: |
-              yarn packages/esfuse-compiler build
+              yarn packages/esfuse-compiler build --target aarch64-apple-darwin
               strip -x packages/esfuse-compiler/*.node
     name: Compiler build - ${{matrix.settings.target}} - node@18
     runs-on: ${{matrix.settings.host}}
@@ -96,22 +106,17 @@ jobs:
           if-no-files-found: error
 
   compiler-tests:
-    name: Compiler test - ${{matrix.settings.target}} - node@${{matrix.node}}
+    name: Compiler test - node@${{matrix.node}}
     needs:
       - compiler-build
     strategy:
       fail-fast: false
       matrix:
-        settings:
-          - host: macos-latest
-            target: x86_64-apple-darwin
-          - host: macos-latest
-            target: aarch64-apple-darwin
         node:
           - '14'
           - '16'
           - '18'
-    runs-on: ${{matrix.settings.host}}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
       - name: Setup node
