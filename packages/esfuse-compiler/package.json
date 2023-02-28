@@ -6,10 +6,8 @@
   "napi": {
     "name": "compiler",
     "triples": {
-      "defaults": false,
       "additional": [
-        "aarch64-apple-darwin",
-        "x86_64-apple-darwin"
+        "aarch64-apple-darwin"
       ]
     },
     "npmClient": "yarn"
