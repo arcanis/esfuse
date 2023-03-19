@@ -1,31 +1,32 @@
 [package]
+name = "esfuse"
 edition = "2021"
-name = "esfuse-compiler"
 version = "0.0.0"
-
-[lib]
-crate-type = ["cdylib"]
 
 [dependencies]
 anyhow = "1.0.69"
-# Default enable napi4 feature, see https://nodejs.org/api/n-api.html#node-api-version-matrix
-napi = { version = "2.11.1", default-features = false, features = ["napi4"] }
-napi-derive = "2.11.0"
+parcel_sourcemap = { version = "2.1.1", features = ["json"] }
+#parcel-resolver = { git = "https://github.com/arcanis/parcel.git", branch = "mael/pnp" }
+parcel-resolver = { path = "/Users/mael.nison/parcel/packages/utils/node-resolver-rs" }
+queues = "1.1.0"
+serde = { version = "1.0.152", features = ["derive"] }
+serde_json = "1.0.93"
 swc = "0.245.35"
 swc_common = "0.29.32"
-swc_core = { version = "0.59.40", features = [
-  "base",
-  "common",
-  "ecma_ast",
-  "ecma_visit",
-  "ecma_transforms",
-  "ecma_parser",
-  "ecma_quote",
-  "ecma_utils",
-] }
-
-[build-dependencies]
-napi-build = "2.0.1"
-
-[profile.release]
-lto = true
+swc_core = { version = "0.59.40", features = ["base", "common", "ecma_ast", "ecma_visit", "ecma_transforms", "ecma_parser", "ecma_quote", "ecma_utils"] }
+thiserror = "1.0.39"
+pathdiff = "0.2.1"
+path-slash = "0.2.1"
+clean-path = "0.2.1"
+regex = "1.7.1"
+fancy-regex = "0.11.0"
+lazy_static = "1.4.0"
+mdxjs = "0.1.8"
+querystring = "1.1.0"
+serde-querystring = "0.2.1"
+markdown = "1.0.0-alpha.7"
+serde_yaml = "0.9.19"
+urlencoding = "2.1.2"
+arca = "0.2.0"
+pnp = "0.4.6"
+clippy = "0.0.302"
