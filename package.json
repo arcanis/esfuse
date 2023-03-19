@@ -1,8 +1,11 @@
 {
   "private": true,
-  "packageManager": "yarn@3.4.1",
+  "packageManager": "yarn@3.5.0",
   "workspaces": [
     "packages/esfuse-compiler/npm/*",
     "packages/*"
-  ]
+  ],
+  "dependencies": {
+    "@napi-rs/cli": "^2.14.8"
+  }
 }
