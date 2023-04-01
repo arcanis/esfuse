@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg viewBox="0 0 500 500" xmlns="http://www.w3.org/2000/svg">
+  <rect width="500" height="500" style="fill: rgb(35, 35, 35);"/>
+  <g style="" transform="matrix(1.058931, 0, 0, 1.058931, -315.99527, -306.604309)">
+    <path d="M 352.313 406.527 L 627.965 406.527 L 589.594 464.39 L 352.313 464.39 L 352.313 406.527 Z" style="fill: rgb(224, 193, 74);"/>
+    <path d="M 352.375 315.788 L 688.137 315.788 L 649.766 373.651 L 352.375 373.651 L 352.375 315.788 Z" style="fill: rgb(255, 255, 255);">
+      <title>F Top Bar</title>
+    </path>
+    <rect x="47.317" y="186.869" width="221.464" height="57.863" style="fill: rgb(255, 255, 255);" transform="matrix(0, 1, -1, 0, 597.292786, 268.530029)">
+      <title>F Left Bar</title>
+    </rect>
+    <path d="M 409.831 539.159 L 540.011 539.159 L 409.831 735.469 L 409.831 539.159 Z" style="fill: rgb(224, 193, 74);"/>
+  </g>
+</svg>

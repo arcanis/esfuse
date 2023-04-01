@@ -1,114 +1,206 @@
 extern crate queues;
 
-use anyhow::{Context};
-use parcel_resolver::{CacheCow, SpecifierType, Resolution};
-use queues::*;
-use std::{collections::{HashMap, HashSet}, borrow::Cow};
+use parcel_sourcemap::SourceMap;
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex};
+use tokio::sync::mpsc::UnboundedSender;
 
+use crate::CompilationError;
+use crate::Project;
 use crate::types::*;
-use crate::{transforms::TransformError, utils};
+use crate::utils;
 
+use super::transform::{OnTransformArgs, OnTransformSwcArgs, transform};
+use super::resolve::{OnResolveArgs, Resolution, resolve};
+
+#[napi(object)]
 pub struct BundleOutput {
+  pub entry: String,
+  pub mime_type: String,
+
   pub code: String,
   pub map: String,
 
-  pub errors: HashMap<String, TransformError>,
+  pub errors: HashMap<String, utils::errors::CompilationError>,
   pub resolutions: HashMap<String, HashMap<String, String>>,
 }
 
-pub fn bundle(initial: ModuleLocator, project: &Project) -> anyhow::Result<BundleOutput> {
-  let mut queued: Queue<ModuleLocator> = queue![initial];
-  let mut traversed = HashSet::new();
+#[derive(Debug)]
+struct BundleMessage {
+  locator: ModuleLocator,
+  sender: UnboundedSender<BundleMessage>,
+}
 
-  let mut errors: HashMap<String, TransformError> = HashMap::new();
-  let mut resolutions: HashMap<String, HashMap<String, String>> = HashMap::new();
+struct BundleModule {
+  code: String,
+  map: Option<SourceMap>,
+  newlines: usize,
+  resolutions: HashMap<String, String>,
+}
 
-  let mut final_source = String::default();
-  let mut final_source_map = parcel_sourcemap::SourceMap::new("");
-  let mut final_nl_count = 0;
+pub async fn bundle(project_base: Arc<Project>, initial: &ModuleLocator) -> BundleOutput {
+  let build_results_container
+    = Arc::new(Mutex::new(HashMap::new()));
 
-  let resolver_fs = parcel_resolver::OsFileSystem::default();
-  let resolver_cache = parcel_resolver::Cache::new(resolver_fs);
-  let resolver = parcel_resolver::Resolver::parcel(
-    Cow::from(&project.root),
-    CacheCow::Owned(resolver_cache),
-  );
+  let (tx, mut rx)
+    = tokio::sync::mpsc::unbounded_channel();
 
-  while queued.size() > 0 {
-    let locator = queued.remove()
-      .expect("Should have been able to pop a value from the queue");
+  tx.send(BundleMessage {
+    locator: initial.clone(),
+    sender: tx.clone(),
+  }).unwrap();
 
-    if !traversed.contains(&locator) {
-      traversed.insert(locator.clone());
-    } else {
-      continue
+  drop(tx);
+
+  let traversed = Arc::new(Mutex::new(HashSet::new()));
+  let mut tasks = vec![];
+
+  let transform_opts_base = Arc::new(OnTransformArgs {
+    swc: OnTransformSwcArgs {
+      use_esfuse_runtime: true,
+    },
+  });
+
+  let resolve_opts_base = Arc::new(OnResolveArgs {
+    force_params: vec![StringKeyValue {
+      name: String::from("transform"),
+      value: Some(String::from("js")),
+    }].into(),
+  });
+
+  while let Some(msg) = rx.recv().await {
+    if !traversed.lock().unwrap().insert(msg.locator.clone()) {
+      continue;
     }
 
-    let transform_result
-      = crate::transforms::transform(&locator.fetch(project)?, project);
+    let build_results_accessor
+      = build_results_container.clone();
 
-    if let Err(err) = transform_result {
-      errors.insert(locator.url(), err);
-      continue
-    }
+    let project
+      = project_base.clone();
+    let transform_opts
+      = transform_opts_base.clone();
+    let resolve_opts
+      = resolve_opts_base.clone();
 
-    let transform_output = transform_result.unwrap();
+    let task = tokio::spawn(async move {
+      let transform_result
+        = transform(&project, &msg.locator, &transform_opts).await;
 
-    if let Some(map) = transform_output.map {
-      let mut map_data = parcel_sourcemap::SourceMap::from_json("/", &map)
-        .expect("Assertion failed: Expected the SWC-generated sourcemap to be readable");
+      let transform_output = transform_result.unwrap();
 
-      final_source_map.add_sourcemap(&mut map_data, final_nl_count)
-        .expect("Assertion failed: Expected the SWC-generated sourcemap to be well-structured");
-    }
+      let source = &transform_output.code;
+      let source_nl_count = count_newlines(source.as_str());
 
-    if traversed.len() > 1 {
-      final_source += "\n";
-      final_nl_count += 1;
-    }
+      let source_map = transform_output.map.map(|str| {
+        parcel_sourcemap::SourceMap::from_json("/", &str)
+          .expect("Assertion failed: Expected the SWC-generated sourcemap to be readable")
+      });
 
-    final_source += &transform_output.code;
-    final_nl_count += count_newlines(transform_output.code.as_str()) as i64;
+      let mut resolutions = HashMap::new();
+      let mut resolution_errors = Vec::new();
+  
+      for import in transform_output.imports {
+        let mut resolution
+          = resolve(&project, &import.specifier, Some(&msg.locator), import.span, &resolve_opts)
+            .await;
 
-    let module_from = locator.physical_path(project)
-      .unwrap_or_default();
+        match &mut resolution.result {
+          Ok(Resolution::Module(target_locator)) => {
+            resolutions
+              .insert(import.specifier, target_locator.url());
+  
+            msg.sender.send(BundleMessage {
+              locator: target_locator.clone(),
+              sender: msg.sender.clone(),
+            }).unwrap();
+          }
+  
+          Err(err) => {
+            resolution_errors.append(&mut err.diagnostics);
+          }
+        }
+      }
 
-    for import in transform_output.imports {
-      let specifier = match import.starts_with('/') {
-        true => ModuleLocator::from_url(&import)?.physical_path(project).unwrap().to_string_lossy().to_string(),
-        false => import.clone(),
+      let build_result = match resolution_errors.is_empty() {
+        true => Ok(BundleModule {
+          code: transform_output.code,
+          map: source_map,
+          newlines: source_nl_count,
+          resolutions,
+        }),
+
+        false => Err(CompilationError {
+          diagnostics: resolution_errors,
+        }),
       };
 
-      let resolution = resolver.resolve(&specifier, &module_from, SpecifierType::Cjs).result
-        .map_err(|error| TransformError::ResolutionError { error })
-        .context(format!("Failed to resolve {} from {:?}", specifier, module_from))?;
+      let mut build_results
+        = build_results_accessor.lock().unwrap();
 
-      match resolution {
-        (Resolution::Path(p), query) => {
-          let dependency_locator = project.locator_from_path(
-            &p,
-            &utils::parse_query(query),
-          );
+      build_results.insert(msg.locator.url(), build_result);
+    });
 
-          resolutions.entry(locator.url()).or_default()
-            .insert(import, dependency_locator.url());
-
-          queued.add(dependency_locator)
-            .unwrap();
-        }
-
-        _ => {}
-      }
-    }
+    tasks.push(task);
   }
 
-  Ok(BundleOutput {
+  // Wait for all tasks to finish
+  for task in tasks {
+    task.await.unwrap();
+  }
+
+  let mut build_results
+    = build_results_container.lock().unwrap();
+
+  let mut sorted_results: Vec<(String, Result<BundleModule, CompilationError>)>
+    = build_results.drain().collect();
+
+  sorted_results.sort_by(|a, b| {
+    b.0.cmp(&a.0)
+  });
+
+  let mut final_nl_count = 0 as usize;
+  let mut final_source = String::default();
+  let mut final_source_map = parcel_sourcemap::SourceMap::new("");
+
+  let mut errors = HashMap::new();
+  let mut resolutions = HashMap::new();
+
+  for (url, module) in sorted_results {
+    if final_nl_count > 0 {
+      final_nl_count += 1;
+      final_source += "\n";
+    }
+  
+    match module {
+      Ok(module) => {
+        if let Some(mut map) = module.map {
+          final_source_map.add_sourcemap(&mut map, final_nl_count as i64)
+            .expect("Assertion failed: Expected the SWC-generated sourcemap to be well-structured");  
+        }
+
+        final_nl_count += module.newlines;
+        final_source += module.code.as_str();
+
+        resolutions.insert(url, module.resolutions);
+      },
+
+      Err(err) => {
+        errors.insert(url, err);
+      },
+    };
+  }
+
+  BundleOutput {
+    entry: initial.url(),
+    mime_type: String::from("text/javascript"),
+
     code: final_source,
     map: final_source_map.to_json(None).expect("Should have been able to serialize the source map"),
 
     errors,
     resolutions,
-  })
+  }
 }
 
 fn count_newlines(s: &str) -> usize {

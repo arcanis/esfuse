@@ -6,6 +6,8 @@ use lazy_static::lazy_static;
 use serde::Serialize;
 use serde_json::{Serializer, json};
 
+use crate::types::*;
+
 pub fn get_extension<P: AsRef<str>>(str: P) -> String {
   lazy_static! {
     static ref RE: Regex = Regex::new(r"(?<!^|[\/])(\.[^.]+)$").unwrap();
@@ -20,22 +22,34 @@ pub fn get_extension<P: AsRef<str>>(str: P) -> String {
     .unwrap_or_default()
 }
 
-pub type QueryString = Vec<(String, Option<String>)>;
+pub fn split_query(str: &str) -> (&str, Option<&str>) {
+  if let Some((subject, query)) = str.split_once('?') {
+    (subject, Some(query))
+  } else {
+    (str, None)
+  }
+}
 
-pub fn parse_query(str_opt: Option<String>) -> QueryString {
-  let mut params = QueryString::new();
+pub fn parse_query(str: &str) -> Vec<StringKeyValue> {
+  let mut params = Vec::new();
 
-  if let Some(str) = str_opt {
-    let slice = match str.starts_with('?') {
-      true => &str[1..str.len()],
-      false => &str,
-    };
+  let slice = match str.starts_with('?') {
+    true => &str[1..str.len()],
+    false => &str,
+  };
 
+  if !str.is_empty() {
     for pair in slice.split('&') {
       if let Some((key, value)) = pair.split_once('=') {
-        params.push((key.to_string(), Some(value.to_string())));
+        params.push(StringKeyValue {
+          name: key.to_string(),
+          value: Some(value.to_string()),
+        });
       } else {
-        params.push((pair.to_string(), None));
+        params.push(StringKeyValue {
+          name: pair.to_string(),
+          value: None,
+        });
       }
     }
   }
@@ -43,21 +57,21 @@ pub fn parse_query(str_opt: Option<String>) -> QueryString {
   params
 }
 
-pub fn stringify_query(params: &QueryString) -> String {
+pub fn stringify_query(params: &Vec<StringKeyValue>) -> String {
   if params.is_empty() {
     return Default::default();
   }
 
   let mut str = String::new();
-  for (key, val_opt) in params {
+  for pair in params {
     str.push(match str.is_empty() {
       true => '?',
       false => '&',
     });
 
-    str.push_str(&match &val_opt {
-      Some(val) => format!("{}={}", urlencoding::encode(key), urlencoding::encode(val)),
-      None => urlencoding::encode(key).into_owned(),
+    str.push_str(&match &pair.value {
+      Some(val) => format!("{}={}", urlencoding::encode(&pair.name), urlencoding::encode(val)),
+      None => urlencoding::encode(&pair.name).into_owned(),
     });
   }
 

@@ -1,34 +1,23 @@
 use fancy_regex::Regex;
 use lazy_static::lazy_static;
-use pnp::fs::ZipCache;
 use serde::Serialize;
 use std::path::PathBuf;
 
-pub use crate::classes::*;
-use crate::{utils, transforms::TransformError};
+use crate::Project;
+use crate::utils;
 
-#[derive(Clone, Debug, Serialize)]
-pub struct Highlight {
-  pub label: Option<String>,
-  pub span: Span,
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct Diagnostic {
-  pub message: String,
-  pub highlights: Vec<Highlight>,
-}
-
-#[derive(Debug, Serialize, Clone, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Serialize)]
+#[napi(object)]
 pub struct Span {
   pub start: Position,
   pub end: Position,
 }
 
-#[derive(Debug, Serialize, Clone, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Serialize)]
+#[napi(object)]
 pub struct Position {
-  pub row: usize,
-  pub col: usize,
+  pub row: u32,
+  pub col: u32,
 }
 
 impl Span {
@@ -52,54 +41,70 @@ impl Span {
 
     Span {
       start: Position {
-        row: start.line,
-        col: start.col_display + 1,
+        row: start.line as u32,
+        col: (start.col_display + 1) as u32,
       },
 
       end: Position {
-        row: end.line,
-        col: end.col_display,
+        row: end.line as u32,
+        col: end.col_display as u32,
       },
     }
   }
 }
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[napi(object)]
+pub struct StringKeyValue {
+  pub name: String,
+  pub value: Option<String>,
+}
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct ModuleLocatorData {
   pub pathname: String,
-  pub params: Vec<(String, Option<String>)>,
+  pub params: Vec<StringKeyValue>,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum ModuleLocator {
   Path(ModuleLocatorData),
+  DevUrl(ModuleLocatorData),
+  ExternalUrl(ModuleLocatorData),
 }
 
 impl ModuleLocator {
-  pub fn from_url<P: AsRef<str>>(url: P) -> Result<Self, TransformError> {
+  pub fn from_url<P: AsRef<str>>(url: P) -> Option<Self> {
     lazy_static! {
-      static ref RE: Regex = Regex::new(r"/_dev/([^/?]+)/([^?]*)(.*)$").unwrap();
+      static ref DEV_RE: Regex = Regex::new(r"^/_dev/([^/?]+)/([^?]*)(.*)$").unwrap();
+      static ref EXT_RE: Regex = Regex::new(r"^(data:[^?]*)(.*)$").unwrap();
     }
 
-    if let Some(captures) = RE.captures(url.as_ref()).unwrap() {
+    if let Some(captures) = DEV_RE.captures(url.as_ref()).unwrap() {
       if let (Some(kind), Some(pathname), Some(qs)) = (captures.get(1), captures.get(2), captures.get(3)) {
         let data = ModuleLocatorData {
           pathname: String::from(pathname.as_str()),
-          params: utils::parse_query(Some(String::from(qs.as_str()))),
+          params: utils::parse_query(qs.as_str()),
         };
 
         return match kind.as_str() {
-          "file" => Ok(ModuleLocator::Path(data)),
-
-          _ => Err(TransformError::InvalidUrl {
-            url: String::from(url.as_ref()),
-          })
+          "file" => Some(ModuleLocator::Path(data)),
+          "internal" => Some(ModuleLocator::DevUrl(data)),
+          _ => None
         };
       }
     }
 
-    Err(TransformError::InvalidUrl {
-      url: String::from(url.as_ref())
-    })
+    if let Some(captures) = EXT_RE.captures(url.as_ref()).unwrap() {
+      if let (Some(pathname), Some(qs)) = (captures.get(1), captures.get(2)) {
+        return Some(ModuleLocator::ExternalUrl(ModuleLocatorData {
+          pathname: String::from(pathname.as_str()),
+          params: utils::parse_query(qs.as_str()),
+        }));
+      }
+    }
+
+    None
   }
 
   pub fn without_query(&self) -> Self {
@@ -109,7 +114,17 @@ impl ModuleLocator {
   }
 
   pub fn url(&self) -> String {
-    format!("/_dev/file/{}{}", &self.pathname, utils::stringify_query(&self.params))
+    match &self {
+      ModuleLocator::ExternalUrl(data) => {
+        format!("{}{}", &data.pathname, utils::stringify_query(&self.params))
+      },
+      ModuleLocator::Path(data) => {
+        format!("/_dev/file/{}{}", &data.pathname, utils::stringify_query(&self.params))
+      },
+      ModuleLocator::DevUrl(data) => {
+        format!("/_dev/internal/{}{}", &data.pathname, utils::stringify_query(&self.params))
+      },
+    }
   }
 
   pub fn physical_path(&self, project: &Project) -> Option<PathBuf> {
@@ -118,25 +133,9 @@ impl ModuleLocator {
         let (ns, pathname) = parse_file_pathname(&data.pathname);
         Some(project.root_ns(ns).join(pathname))
       },
+
+      _ => None,
     }
-  }
-
-  pub fn fetch(&self, project: &Project) -> Result<ModuleBody, std::io::Error> {
-    let source = match self {
-      ModuleLocator::Path(_) => {
-        let p = self.physical_path(project).unwrap();
-
-        pnp::fs::vpath(p.as_ref()).map(|res| match res {
-          pnp::fs::VPath::Native(p) => std::fs::read_to_string(p),
-          pnp::fs::VPath::Zip(zip_path, sub) => project.zip_cache.borrow_mut().read_to_string(&zip_path, &sub),
-        })?
-      },
-    }?;
-
-    Ok(ModuleBody {
-      locator: self.clone(),
-      source,
-    })
   }
 }
 
@@ -145,6 +144,8 @@ impl std::ops::Deref for ModuleLocator {
   fn deref(&self) -> &ModuleLocatorData {
     match self {
       ModuleLocator::Path(data) => data,
+      ModuleLocator::DevUrl(data) => data,
+      ModuleLocator::ExternalUrl(data) => data,
     }
   }
 }
@@ -153,14 +154,10 @@ impl std::ops::DerefMut for ModuleLocator {
   fn deref_mut(&mut self) -> &mut ModuleLocatorData {
     match self {
       ModuleLocator::Path(data) => data,
+      ModuleLocator::DevUrl(data) => data,
+      ModuleLocator::ExternalUrl(data) => data,
     }
   }
-}
-
-#[derive(Clone)]
-pub struct ModuleBody {
-  pub locator: ModuleLocator,
-  pub source: String,
 }
 
 fn parse_file_pathname(str: &String) -> (&str, &str) {

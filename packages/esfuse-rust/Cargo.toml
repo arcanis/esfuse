@@ -4,7 +4,8 @@ edition = "2021"
 version = "0.0.0"
 
 [dependencies]
-anyhow = "1.0.69"
+napi-derive = { git = "https://github.com/napi-rs/napi-rs.git", branch = "reexport-types-from-shared-crate" }
+napi = { git = "https://github.com/napi-rs/napi-rs.git", branch = "reexport-types-from-shared-crate", default-features = false, features = ["napi4"] }
 parcel_sourcemap = { version = "2.1.1", features = ["json"] }
 #parcel-resolver = { git = "https://github.com/arcanis/parcel.git", branch = "mael/pnp" }
 parcel-resolver = { path = "/Users/mael.nison/parcel/packages/utils/node-resolver-rs" }
@@ -13,7 +14,7 @@ serde = { version = "1.0.152", features = ["derive"] }
 serde_json = "1.0.93"
 swc = "0.245.35"
 swc_common = "0.29.32"
-swc_core = { version = "0.59.40", features = ["base", "common", "ecma_ast", "ecma_visit", "ecma_transforms", "ecma_parser", "ecma_quote", "ecma_utils"] }
+swc_core = { version = "0.59.40", features = ["base", "common", "ecma_ast", "ecma_parser_typescript", "ecma_visit", "ecma_transforms", "ecma_parser", "ecma_quote", "ecma_utils"] }
 thiserror = "1.0.39"
 pathdiff = "0.2.1"
 path-slash = "0.2.1"
@@ -28,5 +29,10 @@ markdown = "1.0.0-alpha.7"
 serde_yaml = "0.9.19"
 urlencoding = "2.1.2"
 arca = "0.2.0"
-pnp = "0.4.6"
+#pnp = { path = "/Users/mael.nison/pnp-rust" }
+pnp = "0.6.0"
 clippy = "0.0.302"
+lightningcss = "1.0.0-alpha.40"
+mime_guess = "2.0.4"
+tokio = { version = "1.27.0", features = ["fs", "macros", "rt-multi-thread", "rt", "sync"] }
+base64 = "0.21.0"

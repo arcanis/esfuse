@@ -1,0 +1,11 @@
+{
+  "rust-analyzer.procMacro.ignored": {
+    "napi-derive": ["napi"]
+  },
+  "search.exclude": {
+    "**/.yarn": true,
+    "**/.pnp.*": true
+  },
+  "typescript.tsdk": ".yarn/sdks/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true
+}

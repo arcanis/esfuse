@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "declaration": true,
+    "esModuleInterop": true,
+    "jsx": "react-jsx",
+    "lib": ["ES2020", "DOM"],
+    "moduleResolution": "bundler",
+    "module": "ES2020",
+    "noEmit": true,
+    "strict": true,
+    "target": "ES2020"
+  },
+  "include": [
+    "packages/**/*",
+    "sources/**/*",
+    "website/**/*",
+    "tests/**/*"
+  ]
+}

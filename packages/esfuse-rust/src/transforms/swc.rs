@@ -4,15 +4,23 @@ use swc::config::{SourceMapsConfig, ModuleConfig};
 use swc_common::{errors::Handler, GLOBALS, FileName, comments::SingleThreadedComments};
 use swc_core::ecma::{ast::EsVersion, parser::{Syntax, TsConfig}, visit::as_folder};
 
+use crate::actions::fetch::OnFetchResult;
 use crate::types::*;
-use crate::{utils};
+use crate::utils;
+use crate::{CompilationError, Project};
 
-use super::{TransformError, TransformOutput};
+use super::{OnTransformArgs, OnTransformResult};
 
 mod visitor_1_before;
 mod visitor_2_after;
 
-pub fn transform_swc(module_source: &ModuleBody, _project: &Project) -> Result<TransformOutput, TransformError> {
+#[derive(Default)]
+#[napi(object)]
+pub struct OnTransformSwcArgs {
+  pub use_esfuse_runtime: bool,
+}
+
+pub fn transform_swc(module_source: &OnFetchResult, _project: &Project, opts: &OnTransformArgs) -> Result<OnTransformResult, CompilationError> {
   let cm = Arc::<swc_common::SourceMap>::default();
   let c = swc::Compiler::new(cm.clone());
 
@@ -20,6 +28,7 @@ pub fn transform_swc(module_source: &ModuleBody, _project: &Project) -> Result<T
   };
 
   let mut transform_after = visitor_2_after::TransformVisitor {
+    opts: &opts.swc,
     url: module_source.locator.url(),
     imports: vec![],
   };
@@ -41,6 +50,19 @@ pub fn transform_swc(module_source: &ModuleBody, _project: &Project) -> Result<T
         swc_config.source_maps = Some(SourceMapsConfig::Bool(true));
         swc_config.config.jsc.target = Some(EsVersion::Es2022);
 
+        swc_config.config.jsc.transform = Some(serde_json::from_str(r#"{
+          "optimizer": {
+            "globals": {
+              "envs": {
+                "NODE_ENV": "\"development\""
+              }
+            }
+          },
+          "react": {
+            "runtime": "automatic"
+          }
+        }"#).unwrap()).into();
+
         swc_config.config.jsc.minify = Some(serde_json::from_str(r#"{
           "compress": false,
           "mangle": false
@@ -50,20 +72,17 @@ pub fn transform_swc(module_source: &ModuleBody, _project: &Project) -> Result<T
           "ignoreDynamic": true
         }"#).unwrap()));
 
-        let syntax = swc_config.config.jsc.syntax.unwrap_or_else(|| {
-          Syntax::Typescript(TsConfig {
-            tsx: true,
-            decorators: true,
-            ..Default::default()
-          })
-        });
+        swc_config.config.jsc.syntax = Some(Syntax::Typescript(TsConfig {
+          tsx: true,
+          decorators: true,
+          ..Default::default()
+        }));
 
-        // Need auto detect esm
         let program = c.parse_js(
           file.clone(),
           &handler,
           swc_config.config.jsc.target.unwrap_or(EsVersion::Es2022),
-          syntax,
+          swc_config.config.jsc.syntax.unwrap(),
           swc::config::IsModule::Bool(true),
           Some(&comments),
         )?;
@@ -84,12 +103,20 @@ pub fn transform_swc(module_source: &ModuleBody, _project: &Project) -> Result<T
       })
     })
   }).map_err(|_| {
-    TransformError::CompilationError(utils::errors::CompilationError::from_swc(&error_buffer, &cm))
+    CompilationError::from_swc(&error_buffer, &cm)
   })?;
 
-  Ok(TransformOutput {
+  Ok(OnTransformResult {
+    mime_type: "text/javascript".to_string(),
+
     code: output.code,
     map: output.map,
-    imports: transform_after.imports,
+
+    imports: transform_after.imports.into_iter().map(|(import, swc_span)| {
+      super::ExtractedImport {
+        specifier: import,
+        span: Span::from_swc(&swc_span, &cm),
+      }
+    }).collect(),
   })
 }

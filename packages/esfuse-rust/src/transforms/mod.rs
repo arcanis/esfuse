@@ -1,53 +1,66 @@
-use serde::Serialize;
+use crate::actions::fetch::OnFetchResult;
+use crate::{CompilationError, Project};
+use crate::types::*;
+use crate::utils;
 
-use crate::{types::*, utils};
-
+mod css;
 mod mdx;
 mod swc;
 
-pub struct TransformOutput {
+pub use self::swc::OnTransformSwcArgs;
+
+#[derive(Default)]
+#[napi(object)]
+pub struct OnTransformArgs {
+  pub swc: OnTransformSwcArgs,
+}
+
+#[napi(object)]
+pub struct ExtractedImport {
+  pub specifier: String,
+  pub span: Span,
+}
+
+#[napi(object)]
+pub struct OnTransformResult {
+  pub mime_type: String,
+
   pub code: String,
   pub map: Option<String>,
-  pub imports: Vec<String>,
+
+  pub imports: Vec<ExtractedImport>,
 }
 
-#[derive(thiserror::Error, Debug, Serialize)]
-#[serde(tag = "type")]
-pub enum TransformError {
-  #[error("Invalid module url: {url:?}")]
-  InvalidUrl {
-    url: String,
-  },
+pub fn transform(module_source: &OnFetchResult, project: &Project, opts: &OnTransformArgs) -> Result<OnTransformResult, CompilationError> {
+  let ext = utils::get_extension(&module_source.locator.pathname);
 
-  #[error("Module resolution failed")]
-  ResolutionError {
-    error: parcel_resolver::ResolverError,
-  },
+  match ext.as_str() {
+    ".css" => {
+      self::css::transform_css(module_source, project, opts)
+    }
 
-  #[error(transparent)]
-  CompilationError(
-    utils::errors::CompilationError,
-  ),
-}
-
-pub fn transform(module_source: &ModuleBody, project: &Project) -> Result<TransformOutput, TransformError> {
-  match utils::get_extension(&module_source.locator.pathname).as_str() {
     ".jsx" | ".js" | ".ts" | ".tsx" => {
-      self::swc::transform_swc(module_source, project)
+      self::swc::transform_swc(module_source, project, opts)
     }
 
     ".mdx" => {
-      if module_source.locator.params.iter().any(|(k, _)| k == "meta") {
-        self::mdx::transform_mdx_meta(module_source, project)
+      if module_source.locator.params.iter().any(|pair| pair.name == "meta") {
+        self::mdx::transform_mdx_meta(module_source, project, opts)
       } else {
-        self::mdx::transform_mdx(module_source, project)
+        self::mdx::transform_mdx(module_source, project, opts)
       }
     }
 
     _ => {
-      Ok(TransformOutput {
+      Ok(OnTransformResult {
+        mime_type: mime_guess::from_ext(&ext[1..])
+          .first()
+          .map(|m| m.to_string())
+          .unwrap_or(String::from("text/plain")),
+
         code: module_source.source.clone(),
         map: None,
+
         imports: vec![],
       })
     }

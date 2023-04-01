@@ -1,7 +1,4 @@
-use std::path::{PathBuf, Path};
-
-use esfuse::types::*;
-use esfuse::{bundle};
+use std::{path::{PathBuf, Path}, sync::Arc};
 
 fn find_root(p: &Path) -> Option<PathBuf> {
   let lockfile_path = p.join("yarn.lock");
@@ -15,7 +12,8 @@ fn find_root(p: &Path) -> Option<PathBuf> {
   }
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
   let mut args = std::env::args();
 
   // Skip the program name
@@ -28,7 +26,7 @@ fn main() {
     .unwrap();
 
   let root = find_root(&filename).unwrap();
-  let mut project = Project::new(root);
+  let mut project = esfuse::Project::new(&root);
 
   project.register_ns("ylc", &project.root.join(".yarn/cache"));
   project.register_ns("ygc", &PathBuf::from("/Users/mael.nison/.yarn/berry/cache"));
@@ -38,6 +36,8 @@ fn main() {
     &Default::default(),
   );
 
-  let output = bundle(entry_point, &project).unwrap();
+  let project_arc = Arc::new(project);
+  let output = esfuse::actions::bundle::bundle(project_arc, &entry_point).await;
+
   print!("{}", output.code);
 }

@@ -1,4 +1,9 @@
 [workspace]
 members = [
+    "packages/esfuse-compiler",
     "packages/esfuse-rust"
 ]
+
+#[patch.crates-io]
+#parcel-resolver = { "path" = "/Users/mael.nison/parcel/packages/utils/node-resolver-rs" }
+#pnp = { "path" = "/Users/mael.nison/pnp-rust" }

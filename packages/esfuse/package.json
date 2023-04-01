@@ -1,0 +1,43 @@
+{
+  "name": "esfuse",
+  "main": "./sources/index",
+  "exports": {
+    "./package.json": "./package.json",
+    "./react": "./sources/react.ts"
+  },
+  "dependencies": {
+    "@esfuse/compiler": "workspace:^",
+    "@types/lodash": "^4.14.191",
+    "@types/node": "^18.15.3",
+    "@types/ws": "^8.5.4",
+    "clipanion": "^3.2.0",
+    "css-select": "^5.1.0",
+    "dom-serializer": "^2.0.0",
+    "domhandler": "^5.0.3",
+    "git-smart-project": "^1.2.2",
+    "htmlparser2": "^8.0.2",
+    "lodash": "^4.17.21",
+    "pirates": "^4.0.5",
+    "postcss": "^8.4.21",
+    "radix3": "^1.0.0",
+    "ws": "^8.13.0"
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-dom": "*"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/react": "^18.0.28",
+    "@types/react-dom": "^18.0.11",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  }
+}
