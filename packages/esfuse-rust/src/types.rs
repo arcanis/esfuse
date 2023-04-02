@@ -1,10 +1,109 @@
 use fancy_regex::Regex;
 use lazy_static::lazy_static;
+use napi::bindgen_prelude::FromNapiValue;
+use napi::bindgen_prelude::ToNapiValue;
 use serde::Serialize;
+use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 
+use crate::CompilationError;
 use crate::Project;
+use crate::transforms::OnTransformSwcOpts;
 use crate::utils;
+
+#[napi(object)]
+pub struct OnResolveArgs {
+  pub request: String,
+  pub issuer: Option<ModuleLocator>,
+  pub span: Span,
+  pub opts: OnResolveOpts,
+}
+
+#[derive(Default, Clone)]
+#[napi(object)]
+pub struct OnResolveOpts {
+  pub force_params: Vec<StringKeyValue>,
+}
+
+#[derive(Debug, Clone)]
+pub struct OnResolveResult {
+  pub result: Result<ModuleLocator, CompilationError>,
+}
+
+#[napi(object)]
+pub struct OnFetchArgs {
+  pub locator: ModuleLocator,
+}
+
+#[napi(object)]
+pub struct OnTransformArgs {
+  pub locator: ModuleLocator,
+  pub opts: OnTransformOpts,
+}
+
+#[derive(Clone)]
+pub struct OnFetchResult {
+  pub locator: ModuleLocator,
+  pub source: String,
+}
+
+#[derive(Default, Clone)]
+#[napi(object)]
+pub struct OnTransformOpts {
+  pub swc: OnTransformSwcOpts,
+}
+
+#[derive(Clone)]
+#[napi(object)]
+pub struct ExtractedImport {
+  pub specifier: String,
+  pub span: Span,
+}
+
+#[derive(Clone)]
+#[napi(object)]
+pub struct OnTransformResult {
+  pub mime_type: String,
+
+  pub code: String,
+  pub map: Option<String>,
+
+  pub imports: Vec<ExtractedImport>,
+}
+
+#[napi(object)]
+pub struct OnBundleArgs {
+  pub locator: ModuleLocator,
+}
+
+#[derive(Clone)]
+#[napi(object)]
+pub struct OnBundleResult {
+  pub entry: String,
+  pub mime_type: String,
+
+  pub code: String,
+  pub map: String,
+
+  pub errors: HashMap<String, utils::errors::CompilationError>,
+  pub resolutions: HashMap<String, HashMap<String, String>>,
+}
+
+pub type PluginData = Box<dyn std::any::Any + Send + Sync>;
+
+pub struct PluginHook<TCallback> {
+  pub regexp: Regex,
+  pub params: Vec<StringKeyValue>,
+  pub cb: TCallback,
+  pub data: Arc<PluginData>,
+}
+
+pub type OnResolveHook = fn (data: Arc<PluginData>, args: OnResolveArgs)
+  -> utils::BoxedFuture<Result<ModuleLocator, CompilationError>>;
+pub type OnFetchHook = fn (data: Arc<PluginData>, args: OnFetchArgs)
+  -> utils::BoxedFuture<Result<OnFetchResult, CompilationError>>;
+
 
 #[derive(Clone, Debug, Default, Serialize)]
 #[napi(object)]
@@ -71,6 +170,18 @@ pub enum ModuleLocator {
   Path(ModuleLocatorData),
   DevUrl(ModuleLocatorData),
   ExternalUrl(ModuleLocatorData),
+}
+
+impl ToNapiValue for ModuleLocator {
+  unsafe fn to_napi_value(env: napi::sys::napi_env, val: Self) -> napi::Result<napi::sys::napi_value> {
+    String::to_napi_value(env, val.url())
+  }
+}
+
+impl FromNapiValue for ModuleLocator {
+  unsafe fn from_napi_value(env: napi::sys::napi_env, napi_val: napi::sys::napi_value) -> napi::Result<Self> {
+    ModuleLocator::from_url(String::from_napi_value(env, napi_val)?).ok_or(napi::Error::from_reason("Invalid locator url"))
+  }
 }
 
 impl ModuleLocator {

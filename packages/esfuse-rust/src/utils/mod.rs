@@ -1,12 +1,16 @@
+pub use fancy_regex::Regex;
 pub mod errors;
 pub mod swc;
 
-use fancy_regex::Regex;
+use std::{pin::Pin, future::Future};
+
 use lazy_static::lazy_static;
 use serde::Serialize;
 use serde_json::{Serializer, json};
 
 use crate::types::*;
+
+pub type BoxedFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
 
 pub fn get_extension<P: AsRef<str>>(str: P) -> String {
   lazy_static! {

@@ -1,24 +1,23 @@
-use crate::actions::fetch::OnFetchResult;
+use crate::types::*;
 use crate::utils;
 use crate::{CompilationError, Project};
 
-use super::{OnTransformArgs, OnTransformResult};
 use super::swc::transform_swc;
 
-pub fn transform_mdx(module_source: &OnFetchResult, project: &Project, opts: &OnTransformArgs) -> Result<OnTransformResult, CompilationError> {
+pub fn transform_mdx(project: &Project, module_source: OnFetchResult, args: OnTransformArgs) -> Result<OnTransformResult, CompilationError> {
   let compiled = mdxjs::compile(&module_source.source, &mdxjs::Options {
     ..Default::default()
   }).map_err(|message| {
     utils::errors::CompilationError::from_string(message)
   })?;
 
-  transform_swc(&OnFetchResult {
+  transform_swc(project, OnFetchResult {
     source: compiled,
     ..module_source.clone()
-  }, project, opts)
+  }, args)
 }
 
-pub fn transform_mdx_meta(module_source: &OnFetchResult, project: &Project, opts: &OnTransformArgs) -> Result<OnTransformResult, CompilationError> {
+pub fn transform_mdx_meta(project: &Project, module_source: OnFetchResult, args: OnTransformArgs) -> Result<OnTransformResult, CompilationError> {
   let compiled = markdown::to_mdast(&module_source.source, &markdown::ParseOptions {
     constructs: markdown::Constructs {
       frontmatter: true,
@@ -56,8 +55,8 @@ pub fn transform_mdx_meta(module_source: &OnFetchResult, project: &Project, opts
     stringified_url,
   );
 
-  transform_swc(&OnFetchResult {
+  transform_swc(project, OnFetchResult {
     source: generated,
     ..module_source.clone()
-  }, project, opts)
+  }, args)
 }

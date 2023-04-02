@@ -7,23 +7,11 @@ use tokio::sync::mpsc::UnboundedSender;
 
 use crate::CompilationError;
 use crate::Project;
+use crate::transforms::OnTransformSwcOpts;
 use crate::types::*;
-use crate::utils;
 
-use super::transform::{OnTransformArgs, OnTransformSwcArgs, transform};
-use super::resolve::{OnResolveArgs, Resolution, resolve};
-
-#[napi(object)]
-pub struct BundleOutput {
-  pub entry: String,
-  pub mime_type: String,
-
-  pub code: String,
-  pub map: String,
-
-  pub errors: HashMap<String, utils::errors::CompilationError>,
-  pub resolutions: HashMap<String, HashMap<String, String>>,
-}
+use super::resolve::resolve;
+use super::transform::transform;
 
 #[derive(Debug)]
 struct BundleMessage {
@@ -38,7 +26,7 @@ struct BundleModule {
   resolutions: HashMap<String, String>,
 }
 
-pub async fn bundle(project_base: Arc<Project>, initial: &ModuleLocator) -> BundleOutput {
+pub async fn bundle(project_base: Arc<Project>, args: OnBundleArgs) -> Result<OnBundleResult, CompilationError> {
   let build_results_container
     = Arc::new(Mutex::new(HashMap::new()));
 
@@ -46,7 +34,7 @@ pub async fn bundle(project_base: Arc<Project>, initial: &ModuleLocator) -> Bund
     = tokio::sync::mpsc::unbounded_channel();
 
   tx.send(BundleMessage {
-    locator: initial.clone(),
+    locator: args.locator.clone(),
     sender: tx.clone(),
   }).unwrap();
 
@@ -55,13 +43,13 @@ pub async fn bundle(project_base: Arc<Project>, initial: &ModuleLocator) -> Bund
   let traversed = Arc::new(Mutex::new(HashSet::new()));
   let mut tasks = vec![];
 
-  let transform_opts_base = Arc::new(OnTransformArgs {
-    swc: OnTransformSwcArgs {
+  let transform_opts_base = Arc::new(OnTransformOpts {
+    swc: OnTransformSwcOpts {
       use_esfuse_runtime: true,
     },
   });
 
-  let resolve_opts_base = Arc::new(OnResolveArgs {
+  let resolve_opts_base = Arc::new(OnResolveOpts {
     force_params: vec![StringKeyValue {
       name: String::from("transform"),
       value: Some(String::from("js")),
@@ -84,8 +72,10 @@ pub async fn bundle(project_base: Arc<Project>, initial: &ModuleLocator) -> Bund
       = resolve_opts_base.clone();
 
     let task = tokio::spawn(async move {
-      let transform_result
-        = transform(&project, &msg.locator, &transform_opts).await;
+      let transform_result = transform(&project, OnTransformArgs {
+        locator: msg.locator.clone(),
+        opts: transform_opts.as_ref().clone(),
+      }).await;
 
       let transform_output = transform_result.unwrap();
 
@@ -101,12 +91,15 @@ pub async fn bundle(project_base: Arc<Project>, initial: &ModuleLocator) -> Bund
       let mut resolution_errors = Vec::new();
   
       for import in transform_output.imports {
-        let mut resolution
-          = resolve(&project, &import.specifier, Some(&msg.locator), import.span, &resolve_opts)
-            .await;
+        let mut resolution = resolve(&project, OnResolveArgs {
+          request: import.specifier.clone(),
+          issuer: Some(msg.locator.clone()),
+          span: import.span,
+          opts: resolve_opts.as_ref().clone(),
+        }).await;
 
         match &mut resolution.result {
-          Ok(Resolution::Module(target_locator)) => {
+          Ok(target_locator) => {
             resolutions
               .insert(import.specifier, target_locator.url());
   
@@ -191,8 +184,8 @@ pub async fn bundle(project_base: Arc<Project>, initial: &ModuleLocator) -> Bund
     };
   }
 
-  BundleOutput {
-    entry: initial.url(),
+  Ok(OnBundleResult {
+    entry: args.locator.url(),
     mime_type: String::from("text/javascript"),
 
     code: final_source,
@@ -200,7 +193,7 @@ pub async fn bundle(project_base: Arc<Project>, initial: &ModuleLocator) -> Bund
 
     errors,
     resolutions,
-  }
+  })
 }
 
 fn count_newlines(s: &str) -> usize {

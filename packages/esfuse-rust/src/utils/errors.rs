@@ -21,10 +21,11 @@ pub struct Diagnostic {
 
 impl Diagnostic {
   pub fn from_str(err: &str) -> Self {
-    Self {
-      message: err.to_string(),
-      highlights: vec![].to_vec(),
-    }
+    Self::from_string(err.to_string())
+  }
+
+  pub fn from_str_with_span(err: &str, span: Span) -> Self {
+    Self::from_string_with_span(err.to_string(), span)
   }
 
   pub fn from_string(err: String) -> Self {
@@ -113,6 +114,14 @@ impl CompilationError {
     Self {
       diagnostics: [
         Diagnostic::from_str(err),
+      ].to_vec(),
+    }
+  }
+
+  pub fn from_str_with_span(err: &str, span: Span) -> Self {
+    Self {
+      diagnostics: [
+        Diagnostic::from_str_with_span(err, span),
       ].to_vec(),
     }
   }

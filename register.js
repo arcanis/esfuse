@@ -1,14 +1,14 @@
-const {transformNoHooks} = require(`@esfuse/compiler`);
+const {ProjectHandle} = require(`@esfuse/compiler`);
 const addHook = require(`pirates`).addHook;
 const path = require(`path`);
 
-const project = {
+const handler = ProjectHandle.create({
   root: __dirname,
   namespaces: {},
-};
+});
 
 addHook((code, file) => {
-  return transformNoHooks({project, file}).value.code;
+  return handler.transformNoHooks({file}).value.code;
 }, {
   exts: [`.ts`],
 });

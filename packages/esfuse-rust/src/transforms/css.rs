@@ -1,9 +1,9 @@
-use crate::actions::fetch::OnFetchResult;
+use crate::types::*;
 use crate::{CompilationError, Project};
 
-use super::{OnTransformArgs, OnTransformResult};
+use super::OnTransformResult;
 
-pub fn transform_css(module_source: &OnFetchResult, _project: &Project, _opts: &OnTransformArgs) -> Result<OnTransformResult, CompilationError> {
+pub fn transform_css(_project: &Project, module_source: OnFetchResult, _args: OnTransformArgs) -> Result<OnTransformResult, CompilationError> {
   Ok(OnTransformResult {
     mime_type: "text/css".to_string(),
 

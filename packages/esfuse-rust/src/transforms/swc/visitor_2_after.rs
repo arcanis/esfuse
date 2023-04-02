@@ -7,9 +7,9 @@ use swc_core::ecma::visit::{VisitMut, VisitMutWith};
 
 use swc_core::{quote_expr};
 
-use super::OnTransformSwcArgs;
+use super::OnTransformSwcOpts;
 pub struct TransformVisitor<'a> {
-  pub opts: &'a OnTransformSwcArgs,
+  pub opts: &'a OnTransformSwcOpts,
   pub url: String,
   pub imports: Vec<(String, swc_common::Span)>,
 }

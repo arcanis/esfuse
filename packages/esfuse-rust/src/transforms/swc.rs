@@ -4,23 +4,20 @@ use swc::config::{SourceMapsConfig, ModuleConfig};
 use swc_common::{errors::Handler, GLOBALS, FileName, comments::SingleThreadedComments};
 use swc_core::ecma::{ast::EsVersion, parser::{Syntax, TsConfig}, visit::as_folder};
 
-use crate::actions::fetch::OnFetchResult;
 use crate::types::*;
 use crate::utils;
 use crate::{CompilationError, Project};
 
-use super::{OnTransformArgs, OnTransformResult};
-
 mod visitor_1_before;
 mod visitor_2_after;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 #[napi(object)]
-pub struct OnTransformSwcArgs {
+pub struct OnTransformSwcOpts {
   pub use_esfuse_runtime: bool,
 }
 
-pub fn transform_swc(module_source: &OnFetchResult, _project: &Project, opts: &OnTransformArgs) -> Result<OnTransformResult, CompilationError> {
+pub fn transform_swc(_project: &Project, module_source: OnFetchResult, args: OnTransformArgs) -> Result<OnTransformResult, CompilationError> {
   let cm = Arc::<swc_common::SourceMap>::default();
   let c = swc::Compiler::new(cm.clone());
 
@@ -28,7 +25,7 @@ pub fn transform_swc(module_source: &OnFetchResult, _project: &Project, opts: &O
   };
 
   let mut transform_after = visitor_2_after::TransformVisitor {
-    opts: &opts.swc,
+    opts: &args.opts.swc,
     url: module_source.locator.url(),
     imports: vec![],
   };

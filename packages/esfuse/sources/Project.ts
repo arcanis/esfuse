@@ -9,14 +9,9 @@ import * as gitUtils from './utils/gitUtils';
 import mergeWith from 'lodash/mergeWith';
 
 import {
-  OnTransformArgs,
+  OnTransformOpts,
   ProjectDefinition,
-  bundle,
-  getPathFromUrl,
-  getUrlFromPath,
-  resolveToPath,
-  resolveToUrl,
-  transform,
+  ProjectHandle,
 } from '@esfuse/compiler';
 
 export type WatchEvent = {
@@ -30,6 +25,8 @@ export type GlobOptions = {
 
 export class Project {
   definition: ProjectDefinition;
+  handle: ProjectHandle;
+
   config = defaultConfig();
 
   constructor(public root: string) {
@@ -40,6 +37,8 @@ export class Project {
         [`ygc`]: path.join(os.homedir(), `.yarn/berry/cache`),
       },
     };
+
+    this.handle = ProjectHandle.create(this.definition);
 
     const configPath = path.join(this.root, `esfuse.config.ts`);
     if (fs.existsSync(configPath)) {
@@ -130,31 +129,20 @@ export class Project {
   }
 
   pathToUrl(path: string) {
-    return getUrlFromPath({
-      project: this.definition,
+    return this.handle.getUrlFromPath({
       path,
     });
   }
 
   async resolveToPath(specifier: string, issuer: string = this.root) {
-    return resolveToPath({
-      project: this.definition,
+    return this.handle.resolve({
       specifier,
       from: issuer,
     });
   }
 
-  async resolveToUrl(specifier: string, issuer: string = this.root) {
-    return resolveToUrl({
-      project: this.definition,
-      specifier,
-      from: issuer,
-    });
-  }
-
-  async transform(p: string, opts?: OnTransformArgs) {
-    return transform({
-      project: this.definition,
+  async transform(p: string, opts?: OnTransformOpts) {
+    return this.handle.transform({
       file: p,
       opts,
     });
@@ -164,8 +152,7 @@ export class Project {
     if (p.endsWith(`/tailwind.config.js`))
       return this.tailwind(p);
 
-    const res = await bundle({
-      project: this.definition,
+    const res = await this.handle.bundle({
       entry: p,
     });
 
@@ -195,8 +182,7 @@ export class Project {
   }
 
   private async tailwind(url: string) {
-    const physicalPath = getPathFromUrl({
-      project: this.definition,
+    const physicalPath = this.handle.getPathFromUrl({
       url,
     });
 
@@ -209,7 +195,7 @@ export class Project {
     );
 
     const res = await postcss([
-      require(tailwindPath)(physicalPath),
+      require(tailwindPath!.path!)(physicalPath),
     ]).process(`@tailwind base;\n`);
 
     return {

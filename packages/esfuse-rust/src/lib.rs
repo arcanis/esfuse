@@ -1,9 +1,9 @@
 mod classes;
 mod transforms;
-mod utils;
 
 pub mod actions;
 pub mod types;
+pub mod utils;
 
 pub use classes::Project;
 pub use utils::errors::CompilationError;

@@ -37,7 +37,9 @@ async fn main() {
   );
 
   let project_arc = Arc::new(project);
-  let output = esfuse::actions::bundle::bundle(project_arc, &entry_point).await;
+  let output = esfuse::actions::bundle::bundle(project_arc, esfuse::types::OnBundleArgs {
+    locator: entry_point,
+  }).await.unwrap();
 
   print!("{}", output.code);
 }

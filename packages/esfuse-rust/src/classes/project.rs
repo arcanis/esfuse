@@ -1,33 +1,19 @@
-use fancy_regex::Regex;
 use parcel_resolver::CacheCow;
 use path_slash::PathBufExt;
 use pathdiff::diff_paths;
 use std::borrow::Cow;
-use std::future::Future;
 use std::path::Path;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::pin::Pin;
 
-use crate::actions::fetch::OnFetchResult;
-use crate::actions::resolve::OnResolveArgs;
-use crate::actions::resolve::OnResolveResult;
 use crate::types::*;
 use crate::utils;
-
-pub type BoxedFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
-
-pub struct PluginHook<T> {
-  regexp: Regex,
-  params: Vec<StringKeyValue>,
-  cb: T,
-}
 
 pub struct Project {
   pub root: Cow<'static, Path>,
 
-  pub(crate) on_resolve: Vec<PluginHook<fn (project: &Project, request: &str, issuer: Option<&ModuleLocator>, opts: &OnResolveArgs) -> BoxedFuture<OnResolveResult>>>,
-  pub(crate) on_fetch: Vec<PluginHook<fn (project: &Project, locator: &ModuleLocator) -> BoxedFuture<std::io::Result<OnFetchResult>>>>,
+  pub on_resolve: Vec<PluginHook<OnResolveHook>>,
+  pub on_fetch: Vec<PluginHook<OnFetchHook>>,
 
   pub(crate) resolver: parcel_resolver::Resolver<'static, parcel_resolver::OsFileSystem>,
   pub(crate) zip_cache: pnp::fs::LruZipCache<Vec<u8>>,
@@ -37,10 +23,10 @@ pub struct Project {
 }
 
 impl Project {
-  pub fn resolve_plugin_hook<'a, T>(hooks: &'a Vec<PluginHook<T>>, str: &str) -> Option<&'a T> {
+  pub fn resolve_plugin_hook<'a, TCallback>(hooks: &'a Vec<PluginHook<TCallback>>, str: &str) -> Option<&'a PluginHook<TCallback>> {
     for hook in hooks {
       if hook.regexp.is_match(&str).unwrap() {
-        return Some(&hook.cb)
+        return Some(&hook)
       }
     }
 
