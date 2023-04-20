@@ -1,0 +1,120 @@
+.container {
+    position: fixed;
+    inset: 0;
+
+    display: flex;
+    flex-direction: column;
+
+    padding: 40px;
+
+    overflow-y: scroll;
+
+    background: #111726;
+}
+
+.label {
+    flex: none;
+
+    margin-bottom: 40px;
+    padding-bottom: 5px;
+
+    border-bottom: 1px solid white;
+
+    font-size: 25px;
+    font-weight: bold;
+
+    color: #ffffff;
+}
+
+.exceptionContainer {
+    flex: none;
+
+    padding: 40px;
+
+    background: #1f2937;
+    color: #ffffff;
+}
+
+.stackTrace {
+    display: flex;
+
+    flex: 1;
+
+    margin-top: 40px;
+}
+
+.stackTraceLeft {
+    position: relative;
+
+    flex: none;
+    width: 400px;
+
+    border-right: 1px solid #2e3945;
+
+    background: #1f2937;
+}
+
+.stackTraceRight {
+    flex: 1;
+
+    background: #1f2937;
+}
+
+.stackFrames {
+    position: absolute;
+    inset: 0;
+
+    overflow-y: scroll;
+}
+
+.stackFrame {
+    border-top: 1px solid #2e3945;
+    padding: 20px 40px;
+
+    font-size: .8em;
+
+    color: #ffffff;
+
+    cursor: pointer;
+    user-select: none;
+}
+
+.stackFrame[data-isactive="true"] {
+    background: #2e3945;
+}
+
+.stackFrame:hover {
+    border-color: #ef4543;
+    margin-right: -10px;
+
+    background: #ef4543 !important;
+}
+
+.stackFrame:hover .packageName {
+    color: #ffffff;
+}
+
+.stackFrame:hover + .stackFrame {
+    border-top-color: #ef4543;
+}
+
+.stackFrame:first-child {
+    border-top: 0;
+}
+
+.stackFrameSource {
+    margin-bottom: 10px;
+}
+
+.packageName {
+    display: inline-block;
+
+    margin-right: 10px;
+    font-style: italic;
+
+    color: #7c7c7c;
+}
+
+.highlightedLine {
+	background-color: #95302f !important;
+}

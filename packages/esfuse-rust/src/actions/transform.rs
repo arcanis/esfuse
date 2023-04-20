@@ -1,19 +1,50 @@
-use crate::{CompilationError, Project};
 use crate::types::*;
-use crate::utils;
+use crate::Project;
 
 use super::fetch::{fetch_no_hooks, fetch};
 
-pub fn transform_no_hooks(project: &Project, args: OnTransformArgs) -> Result<OnTransformResult, CompilationError> {
-  let fetch_output = fetch_no_hooks(project, OnFetchArgs { locator: args.locator.clone() })
-    .map_err(|err| utils::errors::CompilationError::from_string(err.to_string()))?;
+pub fn transform_no_hooks(project: &Project, args: OnTransformArgs) -> OnTransformResult {
+  let fetch_res
+    = fetch_no_hooks(project, OnFetchArgs {
+        locator: args.locator.clone(),
+        opts: OnFetchOpts {
+          user_data: args.opts.user_data.clone(),
+        },
+      });
 
-  crate::transforms::transform(project, fetch_output, args)
+  match fetch_res.result {
+    Ok(fetch_data) => {
+      crate::transforms::transform(project, fetch_data, args)
+    },
+
+    Err(err) => {
+      OnTransformResult {
+        result: Err(err),
+        dependencies: fetch_res.dependencies,
+      }
+    },
+  }
 }
 
-pub async fn transform(project: &Project, args: OnTransformArgs) -> Result<OnTransformResult, CompilationError> {
-  let fetch_output = fetch(project, OnFetchArgs { locator: args.locator.clone() }).await
-    .map_err(|err| utils::errors::CompilationError::from_string(err.to_string()))?;
+pub async fn transform(project: &Project, args: OnTransformArgs) -> OnTransformResult {
+  let fetch_res
+    = fetch(project, OnFetchArgs {
+        locator: args.locator.clone(),
+        opts: OnFetchOpts {
+          user_data: args.opts.user_data.clone(),
+        },
+      }).await;
 
-  crate::transforms::transform(project, fetch_output, args)
+  match fetch_res.result {
+    Ok(fetch_data) => {
+      crate::transforms::transform(project, fetch_data, args)
+    },
+
+    Err(err) => {
+      OnTransformResult {
+        result: Err(err),
+        dependencies: fetch_res.dependencies,
+      }
+    },
+  }
 }

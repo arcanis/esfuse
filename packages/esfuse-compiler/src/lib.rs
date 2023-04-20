@@ -4,7 +4,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::{path::PathBuf, collections::HashMap};
 
-use esfuse::types::OnResolveArgs;
+use esfuse::types::ModuleLocator;
 use napi::bindgen_prelude::*;
 use napi::threadsafe_function::{ThreadsafeFunction, ErrorStrategy};
 use napi_derive::napi;
@@ -13,7 +13,7 @@ extern crate napi_derive;
 
 #[napi(object)]
 pub struct ProjectHook {
-  pub regex: String,
+  pub regexp: String,
   pub cb: JsFunction,
 }
 
@@ -23,11 +23,12 @@ pub struct ProjectDefinition {
   pub namespaces: HashMap<String, String>,
 
   pub on_resolve: Vec<ProjectHook>,
+  pub on_fetch: Vec<ProjectHook>,
 }
 
 #[derive(Clone)]
-struct HookData {
-  cb: ThreadsafeFunction<OnResolveArgs, ErrorStrategy::Fatal>,
+struct HookData<T: 'static> {
+  cb: ThreadsafeFunction<T, ErrorStrategy::Fatal>,
 }
 
 #[napi]
@@ -36,13 +37,18 @@ pub struct ProjectHandle {
 }
 
 #[napi(object)]
-pub struct GetPathFromUrlRequest {
-  pub url: String,
+pub struct GetFromLocatorRequest {
+  pub locator: ModuleLocator,
 }
 
 #[napi(object)]
-pub struct GetUrlFromPathRequest {
+pub struct GetFromPathRequest {
   pub path: String,
+}
+
+#[napi(object)]
+pub struct GetFromUrlRequest {
+  pub url: String,
 }
 
 #[napi]
@@ -59,27 +65,39 @@ impl ProjectHandle {
   }
 
   #[napi]
-  pub fn get_path_from_url(&self, req: GetPathFromUrlRequest) -> Option<String> {
-    esfuse::types::ModuleLocator::from_url(req.url)
-      .and_then(|locator| locator.physical_path(&self.project))
+  pub fn dispose(&mut self) {
+    let project = Arc::get_mut(&mut self.project).unwrap();
+
+    project.on_resolve.clear();
+    project.on_fetch.clear();
+  }
+
+  #[napi]
+  pub fn get_path_from_locator(&self, req: GetFromLocatorRequest) -> Option<String> {
+    req.locator.physical_path(&self.project)
       .map(|path| path.to_string_lossy().to_string())
   }
 
   #[napi]
-  pub fn get_url_from_path(&self, req: GetUrlFromPathRequest) -> String {
-    self.project.locator_from_path(&PathBuf::from(req.path), &vec![]).url()
+  pub fn get_locator_from_path(&self, req: GetFromPathRequest) -> Option<esfuse::types::ModuleLocator> {
+    self.project.locator_from_path(&PathBuf::from(req.path), &vec![])
   }
 
   #[napi]
-  pub async fn resolve(&self, args: OnResolveArgs) -> ResolveResult {
+  pub fn get_locator_from_url(&self, req: GetFromUrlRequest) -> Option<esfuse::types::ModuleLocator> {
+    esfuse::types::ModuleLocator::from_url(&req.url)
+  }
+
+  #[napi]
+  pub async fn resolve(&self, args: esfuse::types::OnResolveArgs) -> ResolveResult {
     let res = esfuse::actions::resolve::resolve(
       &self.project,
       args,
-    ).await.result;
+    ).await;
 
-    match res {
-      Ok(value) => ResolveResult { value: Some(value), error: None },
-      Err(error) => ResolveResult { value: None, error: Some(error) },
+    match res.result {
+      Ok(value) => ResolveResult { value: Some(value), error: None, dependencies: res.dependencies },
+      Err(error) => ResolveResult { value: None, error: Some(error), dependencies: res.dependencies },
     }
   }
 
@@ -90,9 +108,9 @@ impl ProjectHandle {
       args,
     );
 
-    match res {
-      Ok(value) => TransformResult { value: Some(value), error: None },
-      Err(error) => TransformResult { value: None, error: Some(error) },
+    match res.result {
+      Ok(value) => TransformResult { value: Some(value), error: None, dependencies: res.dependencies },
+      Err(error) => TransformResult { value: None, error: Some(error), dependencies: res.dependencies },
     }
   }
 
@@ -103,9 +121,9 @@ impl ProjectHandle {
       args,
     ).await;
 
-    match res {
-      Ok(value) => TransformResult { value: Some(value), error: None },
-      Err(error) => TransformResult { value: None, error: Some(error) },
+    match res.result {
+      Ok(value) => TransformResult { value: Some(value), error: None, dependencies: res.dependencies },
+      Err(error) => TransformResult { value: None, error: Some(error), dependencies: res.dependencies },
     }
   }
 
@@ -116,9 +134,9 @@ impl ProjectHandle {
       args,
     ).await;
 
-    match res {
-      Ok(value) => BundleResult { value: Some(value), error: None },
-      Err(error) => BundleResult { value: None, error: Some(error) },
+    match res.result {
+      Ok(value) => BundleResult { value: Some(value), error: None, dependencies: res.dependencies },
+      Err(error) => BundleResult { value: None, error: Some(error), dependencies: res.dependencies },
     }
   }
 }
@@ -137,23 +155,102 @@ pub fn use_project(definition: ProjectDefinition) -> esfuse::Project {
       .unwrap();
 
     project.on_resolve.push(esfuse::types::PluginHook {
-      regexp: esfuse::utils::Regex::from_str("fi").unwrap(),
+      regexp: esfuse::utils::Regex::from_str(&hook.regexp).unwrap(),
       params: Default::default(),
 
-      cb: |data, args| {
+      cb: |hook_data, args| {
         Box::pin(async move {
+          let issuer = args.issuer.clone();
           let span = args.span.clone();
 
-          let user = data.downcast_ref::<HookData>().unwrap().clone();
-          let future = user.cb.call_async::<esfuse::types::ModuleLocator>(args);
-  
-          let res = future.await;
+          let user
+            = hook_data.downcast_ref::<HookData<esfuse::types::OnResolveArgs>>().unwrap().clone();
+          let future
+            = user.cb.call_async::<Promise<Option<ResolveResult>>>(args);
 
-          res.map_err(|_| esfuse::CompilationError::from_str_with_span("Resolution failed", span))
-      })
+          match future.await {
+            Ok(promise) => {
+              match promise.await {
+                Ok(hook_maybe) => hook_maybe.map(|hook_res| {
+                  esfuse::types::OnResolveResult {
+                    result: hook_res.value.ok_or_else(|| hook_res.error.unwrap()),
+                    dependencies: vec![],
+                  } 
+                }),
+  
+                Err(err) => Some(esfuse::types::OnResolveResult {
+                  result: Err(esfuse::CompilationError::from_string_with_highlight(err.to_string(), esfuse::utils::errors::Highlight {
+                    source: issuer.map(|locator| locator.url),
+                    subject: None,
+                    label: None,
+                    span: span.clone(),
+                  })),
+                  dependencies: vec![],
+                }),
+              }
+            },
+
+            Err(err) => Some(esfuse::types::OnResolveResult {
+              result: Err(esfuse::CompilationError::from_string_with_highlight(err.to_string(), esfuse::utils::errors::Highlight {
+                source: issuer.map(|locator| locator.url),
+                subject: None,
+                label: None,
+                span: span.clone(),
+              })),
+              dependencies: vec![],
+            }),
+          }
+        })
       },
 
-      data: Arc::new(Box::new(HookData {
+      data: Arc::new(Box::new(HookData::<esfuse::types::OnResolveArgs> {
+        cb: tsfn,
+      }))
+    });
+  }
+
+  for hook in definition.on_fetch {
+    let tsfn: ThreadsafeFunction<esfuse::types::OnFetchArgs, ErrorStrategy::Fatal> = hook.cb
+      .create_threadsafe_function(0, |ctx| Ok(vec![ctx.value]))
+      .unwrap();
+
+    project.on_fetch.push(esfuse::types::PluginHook {
+      regexp: esfuse::utils::Regex::from_str(&hook.regexp).unwrap(),
+      params: Default::default(),
+
+      cb: |hook_data, args| {
+        Box::pin(async move {
+          let user
+            = hook_data.downcast_ref::<HookData<esfuse::types::OnFetchArgs>>().unwrap().clone();
+          let future
+            = user.cb.call_async::<Promise<Option<FetchResult>>>(args);
+
+          match future.await {
+            Ok(promise) => {
+              match promise.await {
+                Ok(hook_maybe) => hook_maybe.map(|hook_res| {
+                  esfuse::types::OnFetchResult {
+                    result: hook_res.value.ok_or_else(|| hook_res.error.unwrap()),
+                    dependencies: vec![],
+                  } 
+                }),
+  
+                Err(err) => Some(esfuse::types::OnFetchResult {
+                  result: Err(esfuse::CompilationError::from_napi(err)),
+                  dependencies: vec![],
+                }),
+              }
+            },
+
+            Err(err) => Some(esfuse::types::OnFetchResult {
+              result: Err(esfuse::CompilationError::from_napi(err)),
+              dependencies: vec![],
+            }),
+          }
+        })
+      },
+
+      data: Arc::new(Box::new(HookData::<esfuse::types::OnFetchArgs> {
         cb: tsfn,
       }))
     });
@@ -162,20 +259,30 @@ pub fn use_project(definition: ProjectDefinition) -> esfuse::Project {
   project
 }
 
-#[napi]
+#[napi(object)]
 pub struct ResolveResult {
-  pub value: Option<esfuse::types::ModuleLocator>,
+  pub value: Option<esfuse::types::OnResolveResultData>,
   pub error: Option<esfuse::CompilationError>,
+  pub dependencies: Vec<esfuse::types::ModuleLocator>,
 }
 
-#[napi]
+#[napi(object)]
+pub struct FetchResult {
+  pub value: Option<esfuse::types::OnFetchResultData>,
+  pub error: Option<esfuse::CompilationError>,
+  pub dependencies: Vec<esfuse::types::ModuleLocator>,
+}
+
+#[napi(object)]
 pub struct TransformResult {
-  pub value: Option<esfuse::types::OnTransformResult>,
+  pub value: Option<esfuse::types::OnTransformResultData>,
   pub error: Option<esfuse::CompilationError>,
+  pub dependencies: Vec<esfuse::types::ModuleLocator>,
 }
 
-#[napi]
+#[napi(object)]
 pub struct BundleResult {
-  pub value: Option<esfuse::types::OnBundleResult>,
+  pub value: Option<esfuse::types::OnBundleResultData>,
   pub error: Option<esfuse::CompilationError>,
+  pub dependencies: Vec<esfuse::types::ModuleLocator>,
 }

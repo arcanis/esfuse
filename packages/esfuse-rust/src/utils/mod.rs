@@ -8,7 +8,7 @@ use lazy_static::lazy_static;
 use serde::Serialize;
 use serde_json::{Serializer, json};
 
-use crate::types::*;
+use crate::{types::*, CompilationError};
 
 pub type BoxedFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
 
@@ -26,6 +26,38 @@ pub fn get_extension<P: AsRef<str>>(str: P) -> String {
     .unwrap_or_default()
 }
 
+pub fn get_mime_from_ext(ext: &str) -> &str {
+  match ext {
+    ".js" | ".cjs" | ".mjs" | ".jsx" | ".ts" | ".cts" | ".mts" | ".tsx" => {
+      "text/javascript"
+    }
+
+    ".mdx" => {
+      "text/markdown"
+    }
+
+    ".css" => {
+      "text/css"
+    }
+
+    ".json" => {
+      "application/json"
+    }
+
+    ".wasm" => {
+      "application/wasm"
+    }
+
+    _ => {
+      "text/plain"
+    }
+  }
+}
+
+pub fn is_binary_mime_type<T: AsRef<str>>(mime_type: T) -> bool {
+  !mime_type.as_ref().starts_with("text/") && mime_type.as_ref() != "application/json"
+}
+
 pub fn split_query(str: &str) -> (&str, Option<&str>) {
   if let Some((subject, query)) = str.split_once('?') {
     (subject, Some(query))
@@ -39,24 +71,28 @@ pub fn parse_query(str: &str) -> Vec<StringKeyValue> {
 
   let slice = match str.starts_with('?') {
     true => &str[1..str.len()],
-    false => &str,
+    false => str,
   };
 
   if !str.is_empty() {
-    for pair in slice.split('&') {
+    for pair in slice.split(&['?', '&']) {
       if let Some((key, value)) = pair.split_once('=') {
         params.push(StringKeyValue {
           name: key.to_string(),
-          value: Some(value.to_string()),
+          value: value.to_string(),
         });
       } else {
         params.push(StringKeyValue {
           name: pair.to_string(),
-          value: None,
+          value: "".to_string(),
         });
       }
     }
   }
+
+  params.sort_by(|a, b| {
+    a.name.cmp(&b.name)
+  });
 
   params
 }
@@ -73,16 +109,16 @@ pub fn stringify_query(params: &Vec<StringKeyValue>) -> String {
       false => '&',
     });
 
-    str.push_str(&match &pair.value {
-      Some(val) => format!("{}={}", urlencoding::encode(&pair.name), urlencoding::encode(val)),
-      None => urlencoding::encode(&pair.name).into_owned(),
+    str.push_str(&match &pair.value.is_empty() {
+      false => format!("{}={}", urlencoding::encode(&pair.name), urlencoding::encode(&pair.value)),
+      true => urlencoding::encode(&pair.name).into_owned(),
     });
   }
 
   str
 }
 
-pub fn serialize_json<T: serde::Serialize>(val: &T) -> Result<String, serde_json::Error> {
+pub fn serialize_json<T: serde::Serialize>(val: &T, subject: &String) -> Result<String, CompilationError> {
   let mut buf = Vec::new();
 
   let formatter = serde_json::ser::PrettyFormatter::with_indent(b"    ");
@@ -93,5 +129,5 @@ pub fn serialize_json<T: serde::Serialize>(val: &T) -> Result<String, serde_json
   unsafe {
     // serde_json::to_string promises that the result is always utf8
     Ok(String::from_utf8_unchecked(buf))
-  }
+  }.map_err(|e| CompilationError::from_json(&e, subject.clone()))
 }

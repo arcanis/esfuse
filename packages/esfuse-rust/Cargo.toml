@@ -4,8 +4,10 @@ edition = "2021"
 version = "0.0.0"
 
 [dependencies]
-napi-derive = { git = "https://github.com/napi-rs/napi-rs.git", branch = "reexport-types-from-shared-crate" }
-napi = { git = "https://github.com/napi-rs/napi-rs.git", branch = "reexport-types-from-shared-crate", default-features = false, features = ["napi4"] }
+napi-derive = { "path" = "/Users/mael.nison/napi-rs/crates/macro" }
+napi = { "path" = "/Users/mael.nison/napi-rs/crates/napi", default-features = false, features = ["napi4", "serde-json", "tokio_rt"] }
+#napi-derive = "2.12.3"
+#napi = { version = "2.12.4", default-features = false, features = ["napi4", "serde-json", "tokio_rt"] }
 parcel_sourcemap = { version = "2.1.1", features = ["json"] }
 #parcel-resolver = { git = "https://github.com/arcanis/parcel.git", branch = "mael/pnp" }
 parcel-resolver = { path = "/Users/mael.nison/parcel/packages/utils/node-resolver-rs" }

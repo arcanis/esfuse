@@ -3,7 +3,6 @@ use lazy_static::lazy_static;
 use napi::bindgen_prelude::FromNapiValue;
 use napi::bindgen_prelude::ToNapiValue;
 use serde::Serialize;
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -12,58 +11,85 @@ use crate::Project;
 use crate::transforms::OnTransformSwcOpts;
 use crate::utils;
 
+#[derive(Debug, Default, Clone)]
+#[napi(object)]
+pub struct OnResolveOpts {
+  pub force_params: Vec<StringKeyValue>,
+  pub user_data: Arc<serde_json::Value>,
+}
+
+#[derive(Debug, Clone)]
 #[napi(object)]
 pub struct OnResolveArgs {
   pub request: String,
   pub issuer: Option<ModuleLocator>,
-  pub span: Span,
+  pub span: Option<Span>,
   pub opts: OnResolveOpts,
 }
 
-#[derive(Default, Clone)]
+#[derive(Debug, Clone)]
 #[napi(object)]
-pub struct OnResolveOpts {
-  pub force_params: Vec<StringKeyValue>,
+pub struct OnResolveResultData {
+  pub locator: ModuleLocator,
 }
 
 #[derive(Debug, Clone)]
 pub struct OnResolveResult {
-  pub result: Result<ModuleLocator, CompilationError>,
+  pub result: Result<OnResolveResultData, CompilationError>,
+  pub dependencies: Vec<ModuleLocator>,
 }
 
+#[derive(Debug, Clone)]
 #[napi(object)]
 pub struct OnFetchArgs {
   pub locator: ModuleLocator,
+  pub opts: OnFetchOpts,
 }
 
+#[derive(Debug, Clone)]
+#[napi(object)]
+pub struct OnFetchOpts {
+  pub user_data: Arc<serde_json::Value>,
+}
+
+#[derive(Debug, Clone)]
+#[napi(object)]
+pub struct OnFetchResultData {
+  pub locator: ModuleLocator,
+  pub mime_type: String,
+  pub source: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct OnFetchResult {
+  pub result: Result<OnFetchResultData, CompilationError>,
+  pub dependencies: Vec<ModuleLocator>,
+}
+
+#[derive(Debug, Default, Clone)]
+#[napi(object)]
+pub struct OnTransformOpts {
+  pub swc: OnTransformSwcOpts,
+  pub user_data: Arc<serde_json::Value>,
+}
+
+#[derive(Debug, Clone)]
 #[napi(object)]
 pub struct OnTransformArgs {
   pub locator: ModuleLocator,
   pub opts: OnTransformOpts,
 }
 
-#[derive(Clone)]
-pub struct OnFetchResult {
-  pub locator: ModuleLocator,
-  pub source: String,
-}
-
-#[derive(Default, Clone)]
-#[napi(object)]
-pub struct OnTransformOpts {
-  pub swc: OnTransformSwcOpts,
-}
-
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 #[napi(object)]
 pub struct ExtractedImport {
   pub specifier: String,
   pub span: Span,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 #[napi(object)]
-pub struct OnTransformResult {
+pub struct OnTransformResultData {
   pub mime_type: String,
 
   pub code: String,
@@ -72,38 +98,58 @@ pub struct OnTransformResult {
   pub imports: Vec<ExtractedImport>,
 }
 
+#[derive(Debug, Clone)]
+pub struct OnTransformResult {
+  pub result: Result<OnTransformResultData, CompilationError>,
+  pub dependencies: Vec<ModuleLocator>,
+}
+
+#[derive(Debug, Default, Clone)]
+#[napi(object)]
+pub struct OnBundleOpts {
+  pub only_entry_point: bool,
+  pub promisify_entry_point: bool,
+  pub require_on_load: bool,
+  pub runtime: Option<ModuleLocator>,
+  pub user_data: Arc<serde_json::Value>,
+  pub traverse_vendors: bool,
+}
+
 #[napi(object)]
 pub struct OnBundleArgs {
   pub locator: ModuleLocator,
+  pub opts: OnBundleOpts,
 }
 
 #[derive(Clone)]
 #[napi(object)]
-pub struct OnBundleResult {
+pub struct OnBundleResultData {
   pub entry: String,
   pub mime_type: String,
 
   pub code: String,
   pub map: String,
+}
 
-  pub errors: HashMap<String, utils::errors::CompilationError>,
-  pub resolutions: HashMap<String, HashMap<String, String>>,
+#[derive(Clone)]
+pub struct OnBundleResult {
+  pub result: Result<OnBundleResultData, CompilationError>,
+  pub dependencies: Vec<ModuleLocator>,
 }
 
 pub type PluginData = Box<dyn std::any::Any + Send + Sync>;
 
-pub struct PluginHook<TCallback> {
+pub struct PluginHook<TArgs, TRes> {
   pub regexp: Regex,
-  pub params: Vec<StringKeyValue>,
-  pub cb: TCallback,
+  pub params: Vec<OptionStringKeyValue>,
+  pub cb: fn (registration_data: Arc<PluginData>, args: TArgs) -> utils::BoxedFuture<Option<TRes>>,
   pub data: Arc<PluginData>,
 }
 
 pub type OnResolveHook = fn (data: Arc<PluginData>, args: OnResolveArgs)
-  -> utils::BoxedFuture<Result<ModuleLocator, CompilationError>>;
+  -> utils::BoxedFuture<Option<OnResolveResult>>;
 pub type OnFetchHook = fn (data: Arc<PluginData>, args: OnFetchArgs)
-  -> utils::BoxedFuture<Result<OnFetchResult, CompilationError>>;
-
+  -> utils::BoxedFuture<Option<OnFetchResult>>;
 
 #[derive(Clone, Debug, Default, Serialize)]
 #[napi(object)]
@@ -152,66 +198,71 @@ impl Span {
   }
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
 #[napi(object)]
 pub struct StringKeyValue {
+  pub name: String,
+  pub value: String,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[napi(object)]
+pub struct OptionStringKeyValue {
   pub name: String,
   pub value: Option<String>,
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct ModuleLocatorData {
-  pub pathname: String,
+#[derive(Debug, Eq, Hash, PartialEq, Serialize)]
+#[napi]
+pub enum ModuleLocatorKind {
+  File,
+  Internal,
+  External,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
+#[napi(object)]
+pub struct ModuleLocator {
+  pub url: String,
+  pub kind: ModuleLocatorKind,
+  pub specifier: String,
   pub params: Vec<StringKeyValue>,
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub enum ModuleLocator {
-  Path(ModuleLocatorData),
-  DevUrl(ModuleLocatorData),
-  ExternalUrl(ModuleLocatorData),
-}
-
-impl ToNapiValue for ModuleLocator {
-  unsafe fn to_napi_value(env: napi::sys::napi_env, val: Self) -> napi::Result<napi::sys::napi_value> {
-    String::to_napi_value(env, val.url())
-  }
-}
-
-impl FromNapiValue for ModuleLocator {
-  unsafe fn from_napi_value(env: napi::sys::napi_env, napi_val: napi::sys::napi_value) -> napi::Result<Self> {
-    ModuleLocator::from_url(String::from_napi_value(env, napi_val)?).ok_or(napi::Error::from_reason("Invalid locator url"))
-  }
-}
-
 impl ModuleLocator {
+  pub fn new(kind: ModuleLocatorKind, specifier: String, params: Vec<StringKeyValue>) -> Self {
+    let url = match kind {
+      ModuleLocatorKind::File => {
+        format!("/_dev/file/{}{}", &specifier, utils::stringify_query(&params))
+      },
+      ModuleLocatorKind::Internal => {
+        format!("/_dev/internal/{}{}", &specifier, utils::stringify_query(&params))
+      },
+      ModuleLocatorKind::External => {
+        format!("{}{}", &specifier, utils::stringify_query(&params))
+      },
+    };
+
+    Self { url, kind, specifier, params }
+  }
+
   pub fn from_url<P: AsRef<str>>(url: P) -> Option<Self> {
     lazy_static! {
       static ref DEV_RE: Regex = Regex::new(r"^/_dev/([^/?]+)/([^?]*)(.*)$").unwrap();
-      static ref EXT_RE: Regex = Regex::new(r"^(data:[^?]*)(.*)$").unwrap();
     }
 
     if let Some(captures) = DEV_RE.captures(url.as_ref()).unwrap() {
-      if let (Some(kind), Some(pathname), Some(qs)) = (captures.get(1), captures.get(2), captures.get(3)) {
-        let data = ModuleLocatorData {
-          pathname: String::from(pathname.as_str()),
-          params: utils::parse_query(qs.as_str()),
+      if let (Some(kind_segment), Some(specifier_segment), Some(qs_segment)) = (captures.get(1), captures.get(2), captures.get(3)) {
+        let kind = match kind_segment.as_str() {
+          "file" => ModuleLocatorKind::File,
+          "internal" => ModuleLocatorKind::Internal,
+          _ => return None,
         };
 
-        return match kind.as_str() {
-          "file" => Some(ModuleLocator::Path(data)),
-          "internal" => Some(ModuleLocator::DevUrl(data)),
-          _ => None
-        };
-      }
-    }
+        let specifier = String::from(specifier_segment.as_str());
+        let params = utils::parse_query(qs_segment.as_str());
 
-    if let Some(captures) = EXT_RE.captures(url.as_ref()).unwrap() {
-      if let (Some(pathname), Some(qs)) = (captures.get(1), captures.get(2)) {
-        return Some(ModuleLocator::ExternalUrl(ModuleLocatorData {
-          pathname: String::from(pathname.as_str()),
-          params: utils::parse_query(qs.as_str()),
-        }));
+        return Some(ModuleLocator::new(kind, specifier, params));
       }
     }
 
@@ -219,54 +270,17 @@ impl ModuleLocator {
   }
 
   pub fn without_query(&self) -> Self {
-    let mut clone = self.clone();
-    clone.params.clear();
-    clone
-  }
-
-  pub fn url(&self) -> String {
-    match &self {
-      ModuleLocator::ExternalUrl(data) => {
-        format!("{}{}", &data.pathname, utils::stringify_query(&self.params))
-      },
-      ModuleLocator::Path(data) => {
-        format!("/_dev/file/{}{}", &data.pathname, utils::stringify_query(&self.params))
-      },
-      ModuleLocator::DevUrl(data) => {
-        format!("/_dev/internal/{}{}", &data.pathname, utils::stringify_query(&self.params))
-      },
-    }
+    Self::new(self.kind, self.specifier.clone(), vec![])
   }
 
   pub fn physical_path(&self, project: &Project) -> Option<PathBuf> {
-    match self {
-      ModuleLocator::Path(data) => {
-        let (ns, pathname) = parse_file_pathname(&data.pathname);
+    match self.kind {
+      ModuleLocatorKind::File => {
+        let (ns, pathname) = parse_file_pathname(&self.specifier);
         Some(project.root_ns(ns).join(pathname))
       },
 
       _ => None,
-    }
-  }
-}
-
-impl std::ops::Deref for ModuleLocator {
-  type Target = ModuleLocatorData;
-  fn deref(&self) -> &ModuleLocatorData {
-    match self {
-      ModuleLocator::Path(data) => data,
-      ModuleLocator::DevUrl(data) => data,
-      ModuleLocator::ExternalUrl(data) => data,
-    }
-  }
-}
-
-impl std::ops::DerefMut for ModuleLocator {
-  fn deref_mut(&mut self) -> &mut ModuleLocatorData {
-    match self {
-      ModuleLocator::Path(data) => data,
-      ModuleLocator::DevUrl(data) => data,
-      ModuleLocator::ExternalUrl(data) => data,
     }
   }
 }

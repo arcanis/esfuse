@@ -1,0 +1,28 @@
+{
+  "name": "@esfuse/react",
+  "main": "./sources/index",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": "./sources/index.tsx",
+    "./next-like/*": "./sources/next-like/*",
+    "./next-like": "./sources/next-like/index.tsx",
+    "./sources/*": "./sources/*"
+  },
+  "dependencies": {
+    "@monaco-editor/react": "^4.5.0",
+    "@types/react": "^18.0.33",
+    "monaco-editor": "^0.37.1",
+    "react-router-dom": "^6.10.0"
+  },
+  "peerDependencies": {
+    "esfuse": "*",
+    "react": "*",
+    "react-dom": "*"
+  },
+  "devDependencies": {
+    "@types/react-dom": "^18.0.11",
+    "esfuse": "workspace:^",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  }
+}

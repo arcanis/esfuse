@@ -1,7 +1,7 @@
 import fs             from 'fs';
 import path           from 'path';
 
-import * as miscUtils from './miscUtils';
+import * as miscUtils from 'esfuse/sources/utils/miscUtils';
 
 export class ConfigLocator {
   caches = new Map<string, Map<string, boolean>>();

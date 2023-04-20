@@ -8,10 +8,20 @@
   ],
   "dependencies": {
     "@esfuse/compiler": "workspace:^",
-    "@napi-rs/cli": "2.15.1-alpha.0",
+    "@napi-rs/cli": "^2.15.2",
     "@types/node": "^18.15.3",
+    "@yarnpkg/eslint-config": "^0.6.0-rc.5",
     "esfuse": "workspace:^",
+    "eslint": "^8.38.0",
+    "eslint-plugin-arca": "^0.16.0",
     "pirates": "^4.0.5",
     "typescript": "^5.0.2"
+  },
+  "scripts": {
+    "dev": "RUST_BACKTRACE=1 yarn node --watch -r ./register.js ./packages/esfuse/sources/bin.ts dev",
+    "esfuse": "RUST_BACKTRACE=1 yarn node -r ./register.js ./packages/esfuse/sources/bin.ts"
+  },
+  "resolutions": {
+    "source-map@^0.7.4": "patch:source-map@npm%3A0.7.4#./.yarn/patches/source-map-npm-0.7.4-bc8d018ab6.patch"
   }
 }

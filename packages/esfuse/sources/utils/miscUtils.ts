@@ -1,3 +1,11 @@
+export type DeepPartial<T> = {
+  [P in keyof T]?: T[P] extends Array<infer U>
+    ? Array<DeepPartial<U>>
+    : T[P] extends ReadonlyArray<infer U>
+      ? ReadonlyArray<DeepPartial<U>>
+      : DeepPartial<T[P]>
+};
+
 // This function transforms an iterable into an array and sorts it according to
 // the mapper functions provided as parameter. The mappers are expected to take
 // each element from the iterable and generate a string from it, that will then
@@ -127,4 +135,15 @@ export async function replaceStack<T>(val: Promise<T>): Promise<T> {
   } catch (err: any) {
     throw Object.assign(new Error(err.message), err);
   }
+}
+
+export function withErrorLogging<T>(fn: (...args: Array<any>) => Promise<T>) {
+  return async (...args: Array<any>) => {
+    try {
+      return await fn(...args);
+    } catch (err) {
+      console.log(err);
+      throw err;
+    }
+  };
 }

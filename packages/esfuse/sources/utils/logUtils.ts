@@ -1,4 +1,4 @@
-import {MessageName, MessagePayload} from '../MessageName';
+import {MessageName, MessagePayload} from 'esfuse/sources/MessageName';
 
 export type MessageLogFn = <T extends MessageName>(
   name: T,

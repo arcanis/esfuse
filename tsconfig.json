@@ -5,7 +5,7 @@
     "jsx": "react-jsx",
     "lib": ["ES2020", "DOM"],
     "moduleResolution": "bundler",
-    "module": "ES2020",
+    "module": "ESNext",
     "noEmit": true,
     "strict": true,
     "target": "ES2020"

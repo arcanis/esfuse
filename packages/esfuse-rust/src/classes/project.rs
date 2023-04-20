@@ -12,8 +12,8 @@ use crate::utils;
 pub struct Project {
   pub root: Cow<'static, Path>,
 
-  pub on_resolve: Vec<PluginHook<OnResolveHook>>,
-  pub on_fetch: Vec<PluginHook<OnFetchHook>>,
+  pub on_resolve: Vec<PluginHook<OnResolveArgs, OnResolveResult>>,
+  pub on_fetch: Vec<PluginHook<OnFetchArgs, OnFetchResult>>,
 
   pub(crate) resolver: parcel_resolver::Resolver<'static, parcel_resolver::OsFileSystem>,
   pub(crate) zip_cache: pnp::fs::LruZipCache<Vec<u8>>,
@@ -23,10 +23,12 @@ pub struct Project {
 }
 
 impl Project {
-  pub fn resolve_plugin_hook<'a, TCallback>(hooks: &'a Vec<PluginHook<TCallback>>, str: &str) -> Option<&'a PluginHook<TCallback>> {
+  pub async fn resolve_plugin_hook<'a, TArgs : Clone, TRes>(hooks: &'a Vec<PluginHook<TArgs, TRes>>, str: &str, args: TArgs) -> Option<TRes> {
     for hook in hooks {
-      if hook.regexp.is_match(&str).unwrap() {
-        return Some(&hook)
+      if hook.regexp.is_match(str).unwrap() {
+        if let Some(res) = (hook.cb)(hook.data.clone(), args.clone()).await {
+          return Some(res)
+        }
       }
     }
 
@@ -78,32 +80,34 @@ impl Project {
   pub fn locator(&self, specifier: &str) -> Option<ModuleLocator> {
     if specifier.starts_with("/_dev/") || specifier.contains(':') {
       ModuleLocator::from_url(specifier)
-    } else if specifier.starts_with("/") {
+    } else if specifier.starts_with('/') {
       let (pathname, query)
         = utils::split_query(specifier);
 
       let params
-        = query.map_or(Default::default(), |s| utils::parse_query(s));
+        = query.map_or(Default::default(), utils::parse_query);
 
-      Some(self.locator_from_path(&PathBuf::from(pathname), &params))
+      self.locator_from_path(&PathBuf::from(pathname), &params)
     } else {
       None
     }
   }
 
-  pub fn locator_from_path(&self, p: &Path, params: &Vec<StringKeyValue>) -> ModuleLocator {
-    let base = self.path_to_ns.get_ancestor_record(&p)
-      .expect(&format!("Can't locate an ancestor record for {:?}", p));
+  pub fn locator_from_path(&self, p: &Path, params: &[StringKeyValue]) -> Option<ModuleLocator> {
+    if let Some(base) = self.path_to_ns.get_ancestor_record(&p) {
+      let p_rel = diff_paths(p, base.1).unwrap();
 
-    let p_rel = diff_paths(p, base.1).unwrap();
-
-    let pathname = clean_path::clean(p_rel)
-      .to_slash_lossy()
-      .to_string();
-
-    ModuleLocator::Path(ModuleLocatorData {
-      pathname: format!("{}/{}", base.2, pathname),
-      params: params.clone()
-    })
+      let pathname = clean_path::clean(p_rel)
+        .to_slash_lossy()
+        .to_string();
+  
+      Some(ModuleLocator::new(
+        ModuleLocatorKind::File,
+        format!("{}/{}", base.2, pathname),
+        params.to_vec(),
+      ))
+    } else {
+      None
+    }
   }
 }

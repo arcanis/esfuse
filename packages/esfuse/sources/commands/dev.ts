@@ -1,8 +1,7 @@
-import {Command, UsageError}     from 'clipanion';
+import {Command, UsageError} from 'clipanion';
 
-import {Project}     from '../Project';
-import {Server}      from '../Server';
-import * as logUtils from '../utils/logUtils';
+import {Project}             from 'esfuse/sources/Project';
+import {Server}              from 'esfuse/sources/Server';
 
 export class DevCommand extends Command {
   static paths = [[`dev`]];

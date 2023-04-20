@@ -8,8 +8,10 @@ use super::swc::ErrorBuffer;
 #[derive(Clone, Debug, Serialize)]
 #[napi(object)]
 pub struct Highlight {
+  pub source: Option<String>,
+  pub subject: Option<String>,
   pub label: Option<String>,
-  pub span: Span,
+  pub span: Option<Span>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -24,8 +26,8 @@ impl Diagnostic {
     Self::from_string(err.to_string())
   }
 
-  pub fn from_str_with_span(err: &str, span: Span) -> Self {
-    Self::from_string_with_span(err.to_string(), span)
+  pub fn from_str_with_highlight(err: &str, highlight: Highlight) -> Self {
+    Self::from_string_with_highlight(err.to_string(), highlight)
   }
 
   pub fn from_string(err: String) -> Self {
@@ -35,25 +37,28 @@ impl Diagnostic {
     }
   }
 
-  pub fn from_string_with_span(err: String, span: Span) -> Self {
-    Self {
-      message: err,
-      highlights: vec![
-        Highlight {
-          label: None,
-          span
-        },
-      ].to_vec(),
+  pub fn from_string_with_highlight(err: String, highlight: Highlight) -> Self {
+    if highlight.source.is_some() || highlight.subject.is_some() || highlight.label.is_some() || highlight.span.is_some() {
+      return Self {
+        message: err,
+        highlights: vec![
+          highlight,
+        ],
+      }
     }
+
+    Self::from_string(err)
   }
 
-  pub fn from_json(err: &serde_json::Error) -> Self {
+  pub fn from_json(err: &serde_json::Error, source: String) -> Self {
     Self {
       message: err.to_string(),
       highlights: vec![
         Highlight {
+          source: Some(source),
+          subject: None,
           label: None,
-          span: Span {
+          span: Some(Span {
             start: Position {
               row: err.line() as u32,
               col: err.column() as u32,
@@ -63,17 +68,19 @@ impl Diagnostic {
               row: err.line() as u32,
               col: err.column() as u32,
             },
-          }
+          }),
         },
       ].to_vec(),
     }
   }
 
-  pub fn from_yaml(err: &serde_yaml::Error) -> Self {
+  pub fn from_yaml(err: &serde_yaml::Error, source: String) -> Self {
     let highlights = err.location().map(|l| {
       Highlight {
+        source: Some(source),
+        subject: None,
         label: None,
-        span: Span {
+        span: Some(Span {
           start: Position {
             row: l.line() as u32,
             col: l.column() as u32,
@@ -83,7 +90,7 @@ impl Diagnostic {
             row: l.line() as u32,
             col: l.column() as u32,
           },
-        }
+        }),
       }
     }).map_or(vec![], |h| {
       vec![h]
@@ -96,7 +103,7 @@ impl Diagnostic {
   }
 }
 
-#[derive(Debug, Default, Clone, Error)]
+#[derive(Clone, Debug, Default, Error, Serialize)]
 #[error("Compilation error")]
 #[napi(object)]
 pub struct CompilationError {
@@ -110,6 +117,15 @@ impl AsRef<str> for CompilationError {
 }
 
 impl CompilationError {
+  pub fn from_napi(err: napi::Error) -> Self {
+    println!("{:?}", err);
+    Self::from_str(&err.reason)
+  }
+
+  pub fn from_err<T : std::error::Error>(err: T) -> Self {
+    Self::from_string(err.to_string())
+  }
+
   pub fn from_str(err: &str) -> Self {
     Self {
       diagnostics: [
@@ -118,10 +134,10 @@ impl CompilationError {
     }
   }
 
-  pub fn from_str_with_span(err: &str, span: Span) -> Self {
+  pub fn from_str_with_highlight(err: &str, highlight: Highlight) -> Self {
     Self {
       diagnostics: [
-        Diagnostic::from_str_with_span(err, span),
+        Diagnostic::from_str_with_highlight(err, highlight),
       ].to_vec(),
     }
   }
@@ -134,23 +150,23 @@ impl CompilationError {
     }
   }
 
-  pub fn from_string_with_span(err: String, span: Span) -> Self {
+  pub fn from_string_with_highlight(err: String, highlight: Highlight) -> Self {
     Self {
       diagnostics: [
-        Diagnostic::from_string_with_span(err, span),
+        Diagnostic::from_string_with_highlight(err, highlight),
       ].to_vec(),
     }
   }
 
-  pub fn from_json(err: &serde_json::Error) -> Self {
+  pub fn from_json(err: &serde_json::Error, subject: String) -> Self {
     Self {
       diagnostics: [
-        Diagnostic::from_json(err),
+        Diagnostic::from_json(err, subject),
       ].to_vec(),
     }
   }
 
-  pub fn from_swc(err: &ErrorBuffer, source_map: &swc_common::SourceMap) -> Self {
+  pub fn from_swc(err: &ErrorBuffer, source: String, source_map: &swc_common::SourceMap) -> Self {
     let s = err.0.lock().unwrap().clone();
 
     let diagnostics = s.iter().map(|d| {
@@ -158,8 +174,10 @@ impl CompilationError {
         message: d.message(),
         highlights: d.span.span_labels().iter().map(|s| { 
           Highlight {
+            source: Some(source.clone()),
+            subject: None,
             label: s.label.clone(),
-            span: Span::from_swc(&s.span, source_map)
+            span: Some(Span::from_swc(&s.span, source_map)),
           }
         }).collect(),
       }
@@ -170,10 +188,10 @@ impl CompilationError {
     }
   }
 
-  pub fn from_yaml(err: &serde_yaml::Error) -> Self {
+  pub fn from_yaml(err: &serde_yaml::Error, subject: String) -> Self {
     Self {
       diagnostics: [
-        Diagnostic::from_yaml(err),
+        Diagnostic::from_yaml(err, subject),
       ].to_vec(),
     }
   }

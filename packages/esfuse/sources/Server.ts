@@ -1,19 +1,17 @@
-import {TransformErr, TransformOk, resolveToPath}                      from '@esfuse/compiler';
+import {selectOne}                          from 'css-select';
+import {render as stringifyDocument}        from 'dom-serializer';
+import {Element}                            from 'domhandler';
+import fs                                   from 'fs';
+import {parseDocument}                      from 'htmlparser2';
 import {Server as HttpServer, createServer} from 'http';
-import fs from 'fs';
-import {parseDocument} from 'htmlparser2';
-import {Element} from 'domhandler';
-import {selectOne, selectAll} from 'css-select';
-import {render as stringifyDocument} from 'dom-serializer';
+import {AddressInfo}                        from 'net';
+import path                                 from 'path';
 import {WebSocketServer}                    from 'ws';
 
-import {Project}                            from './Project';
-import * as esfuseUtils                     from './utils/esfuseUtils';
-import * as miscUtils                       from './utils/miscUtils';
-import * as nodeUtils                       from './utils/nodeUtils';
-import { ServerConfig } from './Config';
-import { Router } from './Router';
-import { AddressInfo } from 'net';
+import {ServerConfig}                       from 'esfuse/sources/Config';
+import {Project}                            from 'esfuse/sources/Project';
+import {Router}                             from 'esfuse/sources/Router';
+import * as nodeUtils                       from 'esfuse/sources/utils/nodeUtils';
 
 export type Request = {
   method: string;
@@ -36,8 +34,10 @@ export class Server {
   }
 
   endpoints = {
+    [`GET:/_dev/bundle`]: this.bundleHandler,
     [`GET:/_dev/file`]: this.fileHandler,
     [`GET:/_dev/internal/runtime`]: this.runtimeHandler,
+    [`GET:/_dev/internal/tailwind`]: this.tailwindHandler,
   };
 
   http?: HttpServer;
@@ -63,7 +63,7 @@ export class Server {
         continue;
 
       const subPath = pathname.slice(endpoints[t].length) || `/`;
-      handler = req => this.endpoints[endpoint].call(this, req);
+      handler = req => this.endpoints[endpoint].call(this, req, subPath);
 
       break;
     }
@@ -103,11 +103,22 @@ export class Server {
     });
 
     const unwatch = this.project.watch(e => {
+      const changes = [...e.changes].map(([subject, action]) => {
+        const locator = typeof subject === `string`
+          ? this.project.locatorFromPath(path.join(this.project.root, subject))
+          : subject;
+
+        return [locator?.url, action];
+      }).filter(([p]) => {
+        return !!p;
+      });
+
+      if (changes.length === 0)
+        return;
+
       this.broadcast(JSON.stringify({
         type: `watch`,
-        changes: [...e.changes].map(([p, action]) => {
-          return [esfuseUtils.getPublicPath(p, {root: this.project.root}), action];
-        }),
+        changes,
       }));
     });
 
@@ -128,7 +139,7 @@ export class Server {
     return new Promise<AddressInfo>(resolve => {
       http.listen(8080, () => {
         resolve(http.address() as AddressInfo);
-      });  
+      });
     });
   }
 
@@ -145,32 +156,35 @@ export class Server {
 
   async catchAll(req: Request) {
     const {template, script} = this.router.lookup(req.url.pathname);
-    const scriptUrl = script && this.project.pathToUrl(script);
-
-    let tailwind: string | null = null;
-    try {
-      tailwind = script && nodeUtils.findClosestFile(script, `tailwind.config.ts`);
-    } catch {}
+    const scriptLocator = script && this.project.locatorFromPath(script);
 
     const templateText = await fs.promises.readFile(template, `utf8`);
     const templateDom = parseDocument(templateText);
 
-    if (script && scriptUrl) {
-      const head = selectOne(`head`, templateDom);
-      if (head) {
-        head.childNodes.push(new Element(`script`, {
-          defer: `true`,
-          src: `/_dev/internal/runtime`,
-        }));
+    const head = selectOne(`head`, templateDom);
+    if (head) {
+      head.childNodes.push(new Element(`script`, {
+        defer: `true`,
+        src: `/_dev/internal/runtime/base`,
+      }));
 
-        head.childNodes.push(new Element(`script`, {
-          defer: `true`,
-          src: scriptUrl,
-        }));
+      head.childNodes.push(new Element(`script`, {
+        defer: `true`,
+        src: `/_dev/internal/runtime/hmr`,
+      }));
 
+      const tailwindPath = await this.project.tailwind.find(script ?? template);
+      if (tailwindPath) {
         head.childNodes.push(new Element(`script`, {
           defer: `true`,
-          src: `data:application/javascript,$esfuse$.require(${JSON.stringify(scriptUrl)})`,
+          src: path.posix.join(`/_dev/internal/tailwind`, tailwindPath),
+        }));
+      }
+
+      if (scriptLocator) {
+        head.childNodes.push(new Element(`script`, {
+          defer: `true`,
+          src: scriptLocator.url.replace(/^\/_dev\/file\//, `/_dev/bundle/`),
         }));
       }
     }
@@ -179,39 +193,61 @@ export class Server {
       value: {
         mimeType: `text/html`,
         code: stringifyDocument(templateDom),
-        imports: [],
       },
       error: null,
     });
   }
 
-  async fileHandler(req: Request): Promise<Response> {
-    return await miscUtils.route(req.url.searchParams.get(`type`) ?? `bundle`, {
-      bundle: async () => {
-        const res = await this.project.devBundle(req.url.pathname);
+  async bundleHandler(req: Request): Promise<Response> {
+    const locator = this.project.locatorFromUrl(req.url.pathname.replace(/\.map$/, ``).replace(/^\/_dev\/bundle\//, `/_dev/file/`) + req.url.search)!;
+    const res = await this.project.bundle(locator, {requireOnLoad: true, userData: this.getUserData()});
 
-        return {
-          code: 200,
-          headers: {[`Content-Type`]: res.mimeType},
-          body: Buffer.from(res.code),
-        };
-      },
-    });
-  }
-
-  async runtimeHandler(): Promise<Response> {
-    const res = await this.project.transform(require.resolve(`./runtime`));
+    if (res.value && req.url.pathname.endsWith(`.map`))
+      Object.assign(res.value, {mimeType: `application/json`, code: res.value.map});
 
     return this.renderTransformResult(res);
   }
 
-  renderTransformResult(res: TransformOk | TransformErr) {
+  async fileHandler(req: Request): Promise<Response> {
+    const locator = this.project.locatorFromUrl(req.url.pathname.replace(/\.map$/, ``) + req.url.search)!;
+    const res = await this.project.bundle(locator, {requireOnLoad: true, userData: this.getUserData(), onlyEntryPoint: true});
+
+    if (res.value && req.url.pathname.endsWith(`.map`))
+      Object.assign(res.value, {mimeType: `application/json`, code: res.value.map});
+
+    return this.renderTransformResult(res);
+  }
+
+  async tailwindHandler(req: Request, subPath: string): Promise<Response> {
+    const url = `${path.posix.join(`/_dev/internal/tailwind`, subPath)}?transform=js`;
+
+    const locator = this.project.locatorFromUrl(url)!;
+    const res = await this.project.bundle(locator, {requireOnLoad: true});
+
+    return this.renderTransformResult(res);
+  }
+
+  async runtimeHandler(req: Request, subPath: string): Promise<Response> {
+    const locator = this.project.locatorFromPath(require.resolve(`./runtimes${subPath}.ts`))!;
+
+    const res = subPath === `/base`
+      ? await this.project.transform(locator)
+      : await this.project.bundle(locator, {requireOnLoad: true});
+
+    return this.renderTransformResult(res);
+  }
+
+  renderTransformResult(res: {value: {mimeType: string, code: string}, error: null} | {value: null, error: any}) {
     if (res.value) {
+      const body = res.value.mimeType.startsWith(`text/`) || res.value.mimeType === `application/json`
+        ? Buffer.from(res.value.code)
+        : Buffer.from(res.value.code, `base64`);
+
       return {
         code: 200,
         headers: {[`Content-Type`]: res.value.mimeType},
-        body: Buffer.from(res.value.code),
-      };    
+        body,
+      };
     } else {
       return {
         code: 500,
@@ -219,5 +255,11 @@ export class Server {
         body: Buffer.from(JSON.stringify(res.error, null, 2)),
       };
     }
+  }
+
+  private getUserData() {
+    return {
+      pageFolder: this.server.pageFolder,
+    };
   }
 }

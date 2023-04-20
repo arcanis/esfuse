@@ -9,8 +9,10 @@ crate-type = ["cdylib"]
 [dependencies]
 esfuse = { path = "../esfuse-rust" }
 glob-match = "0.2.1"
-napi = { git = "https://github.com/napi-rs/napi-rs.git", branch = "reexport-types-from-shared-crate", default-features = false, features = ["napi4", "tokio_rt"] }
-napi-derive = { git = "https://github.com/napi-rs/napi-rs.git", branch = "reexport-types-from-shared-crate" }
+napi = { "path" = "/Users/mael.nison/napi-rs/crates/napi", default-features = false, features = ["napi4", "serde-json", "tokio_rt"] }
+napi-derive = { "path" = "/Users/mael.nison/napi-rs/crates/macro" }
+#napi = { version = "2.12.4", default-features = false, features = ["napi4", "serde-json", "tokio_rt"] }
+#napi-derive = "2.12.3"
 serde = "1.0.157"
 serde_json = "1.0.94"
 

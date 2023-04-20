@@ -1,0 +1,11 @@
+---
+title: yarn esfuse test
+---
+
+The `yarn esfuse test` command is used to run test files in a project. It uses a simplified test runner that shares the same API as Jest.
+
+## Why not use Jest?
+
+While Jest is a robust testing framework that works well for many projects, Esfuse aims to have full control over the entire transform pipeline. Integrating Jest would require registering Esfuse as a transpiler inside Jest, which is possible but not ideal. Instead, the creator of Esfuse was interested in developing a leaner alternative.
+
+Since the creator doesn't use mocks extensively and tries to avoid snapshots, they decided to build a minimal test runner that uses the assertion library from Jest. This approach provides a reasonable solution and enables Esfuse to maintain full control over the entire transform pipeline.

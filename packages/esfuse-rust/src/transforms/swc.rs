@@ -11,13 +11,14 @@ use crate::{CompilationError, Project};
 mod visitor_1_before;
 mod visitor_2_after;
 
-#[derive(Default, Clone)]
+#[derive(Debug, Default, Clone)]
 #[napi(object)]
 pub struct OnTransformSwcOpts {
   pub use_esfuse_runtime: bool,
+  pub promisify_body: bool,
 }
 
-pub fn transform_swc(_project: &Project, module_source: OnFetchResult, args: OnTransformArgs) -> Result<OnTransformResult, CompilationError> {
+pub fn transform_swc(_project: &Project, fetch_data: OnFetchResultData, args: OnTransformArgs) -> OnTransformResult {
   let cm = Arc::<swc_common::SourceMap>::default();
   let c = swc::Compiler::new(cm.clone());
 
@@ -26,19 +27,19 @@ pub fn transform_swc(_project: &Project, module_source: OnFetchResult, args: OnT
 
   let mut transform_after = visitor_2_after::TransformVisitor {
     opts: &args.opts.swc,
-    url: module_source.locator.url(),
+    url: fetch_data.locator.url.clone(),
     imports: vec![],
   };
 
   let error_buffer = utils::swc::ErrorBuffer::default();
   let handler = Handler::with_emitter(true, false, Box::new(error_buffer.clone()));
 
-  let output = GLOBALS.set(&Default::default(), || {
+  let swc_res = GLOBALS.set(&Default::default(), || {
     swc_common::errors::HANDLER.set(&handler, || {
       c.run_transform(&handler, true, || {
         let file = cm.new_source_file(
-          FileName::Custom(module_source.locator.url()),
-          module_source.source.clone(),
+          FileName::Custom(fetch_data.locator.url.clone()),
+          fetch_data.source.clone(),
         );
 
         let comments = SingleThreadedComments::default();
@@ -56,6 +57,8 @@ pub fn transform_swc(_project: &Project, module_source: OnFetchResult, args: OnT
             }
           },
           "react": {
+            "development": true,
+            "refresh": true,
             "runtime": "automatic"
           }
         }"#).unwrap()).into();
@@ -74,6 +77,8 @@ pub fn transform_swc(_project: &Project, module_source: OnFetchResult, args: OnT
           decorators: true,
           ..Default::default()
         }));
+
+        println!("{:?}", &swc_config.config.jsc.transform.as_ref().unwrap().react);
 
         let program = c.parse_js(
           file.clone(),
@@ -99,21 +104,37 @@ pub fn transform_swc(_project: &Project, module_source: OnFetchResult, args: OnT
         )
       })
     })
-  }).map_err(|_| {
-    CompilationError::from_swc(&error_buffer, &cm)
-  })?;
-
-  Ok(OnTransformResult {
-    mime_type: "text/javascript".to_string(),
-
-    code: output.code,
-    map: output.map,
-
-    imports: transform_after.imports.into_iter().map(|(import, swc_span)| {
-      super::ExtractedImport {
-        specifier: import,
-        span: Span::from_swc(&swc_span, &cm),
+  });
+  
+  match swc_res {
+    Ok(output) => {
+      OnTransformResult {
+        result: Ok(OnTransformResultData {
+          mime_type: "text/javascript".to_string(),
+    
+          code: output.code,
+          map: output.map,
+    
+          imports: transform_after.imports.into_iter().map(|(import, swc_span)| {
+            super::ExtractedImport {
+              specifier: import,
+              span: Span::from_swc(&swc_span, &cm),
+            }
+          }).collect(),
+        }),
+        dependencies: vec![
+          fetch_data.locator,
+        ],
       }
-    }).collect(),
-  })
+    },
+
+    Err(_) => {
+      OnTransformResult {
+        result: Err(CompilationError::from_swc(&error_buffer, fetch_data.locator.url.clone(), &cm)),
+        dependencies: vec![
+          fetch_data.locator,
+        ],
+      }
+    },
+  }
 }

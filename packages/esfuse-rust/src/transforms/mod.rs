@@ -1,6 +1,5 @@
-use crate::{CompilationError, Project};
 use crate::types::*;
-use crate::utils;
+use crate::Project;
 
 mod css;
 mod mdx;
@@ -8,38 +7,38 @@ mod swc;
 
 pub use self::swc::OnTransformSwcOpts;
 
-pub fn transform(project: &Project, module_source: OnFetchResult, args: OnTransformArgs) -> Result<OnTransformResult, CompilationError> {
-  let ext = utils::get_extension(&module_source.locator.pathname);
-
-  match ext.as_str() {
-    ".css" => {
-      self::css::transform_css(project, module_source, args)
-    }
-
-    ".jsx" | ".js" | ".ts" | ".tsx" => {
-      self::swc::transform_swc(project, module_source, args)
-    }
-
-    ".mdx" => {
-      if module_source.locator.params.iter().any(|pair| pair.name == "meta") {
-        self::mdx::transform_mdx_meta(project, module_source, args)
+pub fn transform(project: &Project, fetch_data: OnFetchResultData, args: OnTransformArgs) -> OnTransformResult {
+  match fetch_data.mime_type.as_str() {
+    "text/css" => {
+      if fetch_data.locator.params.iter().any(|pair| pair.name == "transform" && pair.value == "js") {
+        self::css::transform_css_js(project, fetch_data, args)
       } else {
-        self::mdx::transform_mdx(project, module_source, args)
+        self::css::transform_css(project, fetch_data, args)
+      }
+    }
+
+    "text/javascript" => {
+      self::swc::transform_swc(project, fetch_data, args)
+    }
+
+    "text/markdown" => {
+      if fetch_data.locator.params.iter().any(|pair| pair.name == "meta") {
+        self::mdx::transform_mdx_meta(project, fetch_data, args)
+      } else {
+        self::mdx::transform_mdx(project, fetch_data, args)
       }
     }
 
     _ => {
-      Ok(OnTransformResult {
-        mime_type: mime_guess::from_ext(&ext[1..])
-          .first()
-          .map(|m| m.to_string())
-          .unwrap_or(String::from("text/plain")),
-
-        code: module_source.source.clone(),
-        map: None,
-
-        imports: vec![],
-      })
+      OnTransformResult {
+        result: Ok(OnTransformResultData {
+          mime_type: fetch_data.mime_type,
+          code: fetch_data.source,
+          map: None,
+          imports: vec![],
+        }),
+        dependencies: vec![],
+      }
     }
   }
 }

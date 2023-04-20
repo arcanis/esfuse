@@ -1,0 +1,45 @@
+---
+title: yarn esfuse pack
+---
+
+The `yarn esfuse pack` command is meant to be called from your `prepack` script, defined in your `package.json`. It builds the project, generates the types, and updates the `package.json` configuration.
+
+## Configuration
+
+### Typescript
+
+```ts twoslash
+export const config: ApplicationConfigFn = () => ({
+  operations: {
+    pack: {
+      sourceDir: `sources`,
+      distDir: `dist/esfuse`,
+
+      generatedOutputs: {
+        cjs: true,
+        esm: false,
+        types: true,
+      },
+
+      disablePrevalEvaluation: [
+        `./sources/entrypoints/*.ts`,
+      ],
+    },
+  },
+});
+```
+
+### Details
+
+| `operations.pack.sourceDir` | The folder where are stored the source files that Esfuse should pack |
+| `operations.pack.distDir` | The folder where will be stored the compiled files |
+| `operations.pack.generatedOutputs.cjs` | If true (the default), generates CommonJS `*.js` files |
+| `operations.pack.generatedOutputs.esm` | If true (not the default!), generates ESM `*.mjs` files |
+| `operations.pack.generatedOutputs.types` | If true (the default), generates TS `*.d.ts` files |
+| `operations.pack.disablePrevalEvaluation` | An array of pattern that shouldn't be evaluated by the preval transform. Using this field shouldn't be needed, unless your application is an Esfuse proto-framework. | 
+
+## Automatic manifest 
+
+Esfuse will automatically "mutate" the `package.json` file. The `main`, `cli`, `imports`, and `exports` fields will get automatically updated to respect the configuration set in the `operations.pack` field.
+
+This feature requires Yarn 4+.

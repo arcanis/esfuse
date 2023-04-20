@@ -1,5 +1,4 @@
 use swc_core::common::{DUMMY_SP};
-use swc_core::common::util::take::Take;
 
 use swc_core::ecma::ast::{self};
 use swc_core::ecma::utils::{quote_ident, quote_str};
@@ -69,58 +68,99 @@ impl<'a> VisitMut for TransformVisitor<'a> {
   fn visit_mut_module(&mut self, e: &mut ast::Module) {
     e.visit_mut_children_with(self);
 
-    if self.opts.use_esfuse_runtime {
-      e.body = [
-        ast::ModuleItem::Stmt(
-          ast::Stmt::Expr(ast::ExprStmt {
-            span: DUMMY_SP,
-            expr: ast::CallExpr {
-              span: DUMMY_SP,
-              callee: ast::Callee::Expr(quote_expr!("$esfuse$.define")),
-              args: [
-              ast::ExprOrSpread {
-                spread: None,
-                expr: quote_str!(self.url.clone()).into(),
-              },
-              ast::ExprOrSpread {
-                spread: None,
-                expr: ast::ArrowExpr {
-                  span: DUMMY_SP,
-                  params: [
-                  ast::Pat::Ident(ast::BindingIdent {
-                    id: quote_ident!("module"),
-                    type_ann: None,
-                  }),
-                  ast::Pat::Ident(ast::BindingIdent {
-                    id: quote_ident!("exports"),
-                    type_ann: None,
-                  }),
-                  ast::Pat::Ident(ast::BindingIdent {
-                    id: quote_ident!("require"),
-                    type_ann: None,
-                  }),
-                  ].to_vec(),
-                  body: ast::BlockStmtOrExpr::BlockStmt(ast::BlockStmt {
-                    span: DUMMY_SP,
-                    stmts: e.body.clone().into_iter().filter_map(|i| match i {
-                      ast::ModuleItem::Stmt(stmt) => Some(stmt),
-                      _ => None
-                    }).collect(),
-                  }),
-                  is_async: false,
-                  is_generator: false,
-                  type_params: Take::dummy(),
-                  return_type: Take::dummy(),
-                }.into(),
-              },
-              ].to_vec(),
-              type_args: Take::dummy(),
-            }.into(),
-          })
-        ),
-      ].to_vec();
+    let mut stmts: Vec<ast::Stmt> = e.body.clone().into_iter().filter_map(|i| match i {
+      ast::ModuleItem::Stmt(stmt) => Some(stmt),
+      _ => None
+    }).collect();
+
+    if self.opts.promisify_body {
+      let async_fn = ast::Expr::Arrow(ast::ArrowExpr {
+        span: DUMMY_SP,
+        params: vec![],
+        body: ast::BlockStmtOrExpr::BlockStmt(ast::BlockStmt {
+          span: DUMMY_SP,
+          stmts,
+        }),
+        is_async: true,
+        is_generator: false,
+        type_params: None,
+        return_type: None,
+      });
+
+      let async_expr = quote_expr!("
+        module.exports = Promise.resolve({
+          exports: {},
+        }).then((module, exports = module.exports) => {
+          return ($async_fn)().then(() => module.exports);
+        })
+      ",
+        async_fn: Expr = async_fn,
+      );
+
+      stmts = vec![
+        ast::ExprStmt {
+          span: DUMMY_SP,
+          expr: async_expr,
+        }.into(),
+      ];
     }
-  }
+
+    if self.opts.use_esfuse_runtime {
+      let mod_vars = vec![
+        ast::Pat::Ident(ast::BindingIdent {
+          id: quote_ident!("module"),
+          type_ann: None,
+        }),
+        ast::Pat::Ident(ast::BindingIdent {
+          id: quote_ident!("exports"),
+          type_ann: None,
+        }),
+        ast::Pat::Ident(ast::BindingIdent {
+          id: quote_ident!("require"),
+          type_ann: None,
+        }),
+        ast::Pat::Ident(ast::BindingIdent {
+          id: quote_ident!("__filename"),
+          type_ann: None,
+        }),
+        ast::Pat::Ident(ast::BindingIdent {
+          id: quote_ident!("__dirname"),
+          type_ann: None,
+        }),
+      ];
+
+      let mod_fn = ast::Expr::Arrow(ast::ArrowExpr {
+        span: DUMMY_SP,
+        params: mod_vars,
+        body: ast::BlockStmtOrExpr::BlockStmt(ast::BlockStmt {
+          span: DUMMY_SP,
+          stmts,
+        }),
+        is_async: false,
+        is_generator: false,
+        type_params: None,
+        return_type: None,
+      });
+
+      let mod_expr = quote_expr!("
+        $esfuse$.define($mod_url, $mod_fn);
+      ",
+        mod_url:Expr = quote_str!(self.url.clone()).into(),
+        mod_fn: Expr = mod_fn,
+      );
+
+      stmts = vec![
+        ast::ExprStmt {
+          span: DUMMY_SP,
+          expr: mod_expr,
+        }.into(),
+      ];
+    }
+
+    e.body = stmts.drain(0..).map(|stmt| {
+      ast::ModuleItem::Stmt(stmt)
+    }).collect();
+}
 
   fn visit_mut_expr(&mut self, e: &mut ast::Expr) {
     if let Some(call) = e.as_call() {
@@ -131,7 +171,7 @@ impl<'a> VisitMut for TransformVisitor<'a> {
               arg.quasis.iter().map(|q| q.cooked.as_ref().map_or("".to_string(), |v| v.to_string())).collect(),
               arg.exprs.iter().enumerate().map(|(i, _q)| format!("[...t{i}]")).collect(),
             ).join("");
-            
+
             let dynamic_parameters = ast::ObjectLit {
               span: DUMMY_SP,
               props: arg.exprs.iter().enumerate().map(|(i, q)| ast::PropOrSpread::Prop(ast::Prop::KeyValue(ast::KeyValueProp {
@@ -139,7 +179,7 @@ impl<'a> VisitMut for TransformVisitor<'a> {
                 value: q.to_owned(),
               }).into())).collect(),
             };
-            
+
             *e = *quote_expr!(
               "(args => import($path).then(m => m.fetch(args)))($params)",
               path: Expr = quote_str!(new_import_specifier).into(),
@@ -158,7 +198,7 @@ impl<'a> VisitMut for TransformVisitor<'a> {
 
     if e.callee.is_import() {
       self.register_import(&e.args[0].expr);
-      e.callee = ast::Callee::Expr(quote_expr!("$esfuse$.import"));
+      e.callee = ast::Callee::Expr(quote_expr!("require.import"));
     }
 
     if let ast::Callee::Expr(callee) = &e.callee {

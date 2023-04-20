@@ -7,38 +7,67 @@ use crate::{CompilationError, Project};
 pub async fn resolve(project: &Project, args: OnResolveArgs) -> OnResolveResult {
   if let Some(locator) = project.locator(&args.request) {
     return OnResolveResult {
-      result: Ok(locator),
+      result: Ok(OnResolveResultData { locator }),
+      dependencies: vec![],
     }
   }
 
-  if let Some(hook) = Project::resolve_plugin_hook(&project.on_resolve, &args.request) {
+  Project::resolve_plugin_hook(
+    &project.on_resolve,
+    &args.request.clone(),
+    args.clone(),
+  ).await.unwrap_or_else(|| {
+    resolve_no_hooks(project, args)
+  })
+}
+
+pub fn resolve_no_hooks(project: &Project, args: OnResolveArgs) -> OnResolveResult {
+  if let Some(locator) = project.locator(&args.request) {
     return OnResolveResult {
-      result: (hook.cb)(hook.data.clone(), args).await,
-    };
+      result: Ok(OnResolveResultData { locator }),
+      dependencies: vec![],
+    }
   }
 
-  let base = args.issuer.and_then(|locator| {
+  let base = args.issuer.clone().and_then(|locator| {
     locator.physical_path(project)
   }).unwrap_or_else(|| project.root.to_path_buf());
 
+  let (specifier, mut request_params) = args.request.split_once('?')
+    .map(|(specifier, qs)| (specifier, utils::parse_query(qs)))
+    .unwrap_or((&args.request, vec![]));
+
+  let mut params = vec![];
+  params.append(&mut args.opts.force_params.clone());
+  params.append(&mut request_params);
+
   let r =
-    project.resolver.resolve(&args.request, &base, SpecifierType::Cjs);
+    project.resolver.resolve(&specifier, &base, SpecifierType::Cjs);
 
   OnResolveResult {
     result: match r.result {
-      Ok((parcel_resolver::Resolution::Path(p), query)) => {
-        let mut params
-          = query.map_or(Default::default(), |s| utils::parse_query(s.as_str()));
+      Ok((parcel_resolver::Resolution::Path(p), _)) => {
 
-        params.append(&mut args.opts.force_params.clone());
+        Ok(OnResolveResultData {
+          locator: project.locator_from_path(&p, &params).unwrap(),
+        })
+      },
 
-        Ok(project.locator_from_path(&p, &params))
-      }
+      Ok((parcel_resolver::Resolution::Builtin(name), _)) => {
+        Ok(OnResolveResultData {
+          locator: ModuleLocator {
+            url: name.clone(),
+            kind: ModuleLocatorKind::External,
+            specifier: name,
+            params: vec![],
+          },
+        })
+      },
 
       Err(err) => {
         Err(CompilationError {
           diagnostics: vec![
-            utils::errors::Diagnostic::from_string_with_span(match err {
+            utils::errors::Diagnostic::from_string_with_highlight(match err {
               ResolverError::UnknownScheme{..}
                 => String::from("Unknown scheme"),
               ResolverError::UnknownError{..}
@@ -48,35 +77,50 @@ pub async fn resolve(project: &Project, args: OnResolveArgs) -> OnResolveResult 
               ResolverError::ModuleNotFound { module }
                 => format!("Module not found ({:?})", module),
               ResolverError::ModuleEntryNotFound { .. }
-                => format!("Module entry not found"),
+                => "Module entry not found".to_string(),
               ResolverError::ModuleSubpathNotFound { .. }
-                => format!("Module subpath not found"),
+                => "Module subpath not found".to_string(),
               ResolverError::JsonError(_)
-                => format!("Json error"),
+                => "Json error".to_string(),
               ResolverError::IOError(_)
-                => format!("IO error"),
-              ResolverError::PackageJsonError { path, .. }
-                => format!("Invalid package manifest file ({:?})", &path),
+                => "IO error".to_string(),
+              ResolverError::PackageJsonError { path, error, .. }
+                => format!("Invalid package manifest file ({:?} in {:?})", &error, &path),
               ResolverError::PackageJsonNotFound { from }
                 => format!("Package manifest not found ({:?})", &from),
               ResolverError::InvalidSpecifier(_)
-                => format!("Invalid specifier"),
+                => "Invalid specifier".to_string(),
               ResolverError::TsConfigExtendsNotFound { .. }
-                => format!("Extended TypeScript configuration file not found"),
+                => "Extended TypeScript configuration file not found".to_string(),
               ResolverError::PnpResolutionError(err)
                 => err.to_string(),
-            }, args.span)
-          ].to_vec(),
+            }, utils::errors::Highlight {
+              source: args.issuer.map(|locator| locator.url),
+              subject: None,
+              label: None,
+              span: args.span,
+            }),
+          ],
         })
-      }
+      },
 
-      _ => {
+      unknown_resolution => {
         Err(CompilationError {
           diagnostics: vec![
-            utils::errors::Diagnostic::from_string_with_span(String::from("Unsupported resolution"), args.span)
-          ].to_vec(),
+            utils::errors::Diagnostic::from_string_with_highlight(
+              format!("Unsupported resolution: {:?}", unknown_resolution),
+              utils::errors::Highlight {
+                source: args.issuer.map(|locator| locator.url.clone()),
+                subject: None,
+                label: None,
+                span: args.span,
+              },
+            ),
+          ],
         })
-      }
+      },
     },
+
+    dependencies: vec![],
   }
 }

@@ -1,7 +1,7 @@
-import * as tsUtils from './utils/tsUtils';
+import * as tsUtils from 'esfuse/sources/utils/tsUtils';
 
 export type ServerConfig = {
-  pageFolder: string,
+  pageFolder: string;
 };
 
 export type Config = {

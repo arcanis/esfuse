@@ -1,11 +1,17 @@
 {
   "rust-analyzer.procMacro.ignored": {
-    "napi-derive": ["napi"]
+    "napi-derive": [
+      "napi"
+    ]
   },
   "search.exclude": {
     "**/.yarn": true,
     "**/.pnp.*": true
   },
   "typescript.tsdk": ".yarn/sdks/typescript/lib",
-  "typescript.enablePromptUseWorkspaceTsdk": true
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+  "eslint.nodePath": ".yarn/sdks",
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": true
+  }
 }

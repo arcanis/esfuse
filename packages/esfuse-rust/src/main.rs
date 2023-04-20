@@ -33,13 +33,14 @@ async fn main() {
 
   let entry_point = project.locator_from_path(
     &filename,
-    &Default::default(),
-  );
+    &vec![],
+  ).unwrap();
 
   let project_arc = Arc::new(project);
-  let output = esfuse::actions::bundle::bundle(project_arc, esfuse::types::OnBundleArgs {
+  let bundle = esfuse::actions::bundle::bundle(project_arc, esfuse::types::OnBundleArgs {
     locator: entry_point,
-  }).await.unwrap();
+    opts: Default::default(),
+  }).await.result.unwrap();
 
-  print!("{}", output.code);
+  print!("{}", bundle.code);
 }
