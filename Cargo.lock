@@ -1217,8 +1217,6 @@ checksum = "2532096657941c2fea9c289d370a250971c689d4f143798ff67113ec042024a5"
 [[package]]
 name = "mdxjs"
 version = "0.1.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe9bef082151ac4aba3884306e47fd2c1afcc2e208a9cb9a67c4ecfb96bb5d0c"
 dependencies = [
  "markdown",
  "swc_core 0.75.22",

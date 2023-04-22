@@ -28,7 +28,11 @@ addHook((code, path) => {
   if (result.error)
     throw new Error(JSON.stringify(result.error, null, 2));
 
-  return result.value.code;
+  let transpiled = result.value.code;
+  if (result.value.map)
+    transpiled += `\n//# sourceMappingURL=data:application/json;base64,${Buffer.from(result.value.map).toString(`base64url`)}\n`;
+
+  return transpiled;
 }, {
   exts: [`.ts`],
 });

@@ -93,7 +93,7 @@ export function parseFilePattern(path: string) {
       checkIsIdentifierCharacter();
 
       let value = ``;
-      while (isIdentifierCharacter()) {
+      while (i < fsPattern.length && isIdentifierCharacter()) {
         value += fsPattern[i];
         i += 1;
       }

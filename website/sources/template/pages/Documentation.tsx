@@ -78,7 +78,6 @@ export function Documentation() {
 
                     {/* Main area */}
                     <div className={`min-w-0`}>
-
                       {/* Mobile hamburger + breadcrumbs */}
                       <div className={`md:hidden flex items-center mb-8`}>
                         {/* Hamburger button */}
@@ -103,25 +102,17 @@ export function Documentation() {
 
                       {/* Content footer */}
                       <PageFooter />
-
                     </div>
 
                     {/* Secondary navigation */}
                     <DocumentationNav />
-
                   </article>
-
                 </div>
               </div>
-
             </div>
-
           </div>
-
         </section>
-
       </main>
-
     </div>
   );
 }

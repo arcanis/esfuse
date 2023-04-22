@@ -187,7 +187,6 @@ const $esfuse$: EsfuseRuntime = {
 
       const promise = new Promise(resolve => {
         script.addEventListener(`load`, () => {
-          console.log(`foo`, $esfuse$.require(p));
           resolve({default: $esfuse$.require(p)});
         });
       });

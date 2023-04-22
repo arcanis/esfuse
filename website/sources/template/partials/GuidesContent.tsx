@@ -3,13 +3,14 @@ import Image01           from 'website/sources/template/images/content-image-01.
 import Image02           from 'website/sources/template/images/content-image-02.jpg';
 import {Modal}           from 'website/sources/template/utils/Modal';
 
+////////
 export function GuidesContent() {
   const [videoModalOpen, setVideoModalOpen] = useState(false);
 
   return (
     <div>
       <header className={`mb-6`}>
-        <h1 className={`h2 text-slate-800 mb-4 dark:text-slate-200`}>Marketing API Quick Start</h1>
+        <h1 className={`text-4xl font-[650] text-slate-800 mb-4 dark:text-slate-200`}>Marketing API Quick Start</h1>
         <p className={`text-lg text-slate-600 dark:text-slate-400`}>
           This guide will give you everything you need to start using the Docs Marketing API to manage audiences, control automation workflows, sync
           email activity with your database, and more.
@@ -21,7 +22,7 @@ export function GuidesContent() {
           <div className={`space-y-4`}>
             {/* HTML Bookmark */}
             {/* The data-scrollspy-target attribute makes the scrollspy work */}
-            <h2 id={`at-a-glance`} data-scrollspy-target className={`h4 text-slate-800 scroll-mt-24 dark:text-slate-200`}>
+            <h2 id={`at-a-glance`} data-scrollspy-target className={`text-2xl font-[650] text-slate-800 scroll-mt-24 dark:text-slate-200`}>
               At a glance
             </h2>
             <p>
@@ -36,7 +37,7 @@ export function GuidesContent() {
           <div className={`space-y-4`}>
             {/* HTML Bookmark */}
             {/* The data-scrollspy-target attribute makes the scrollspy work */}
-            <h2 id={`generate-api`} data-scrollspy-target className={`h4 text-slate-800 scroll-mt-24 dark:text-slate-200`}>
+            <h2 id={`generate-api`} data-scrollspy-target className={`text-2xl font-[650] text-slate-800 scroll-mt-24 dark:text-slate-200`}>
               Generate your API key
             </h2>
             <p>
@@ -95,7 +96,7 @@ export function GuidesContent() {
           <div className={`space-y-4`}>
             {/* HTML Bookmark */}
             {/* The data-scrollspy-target attribute makes the scrollspy work */}
-            <h2 id={`install`} data-scrollspy-target className={`h4 text-slate-800 scroll-mt-24 dark:text-slate-200`}>
+            <h2 id={`install`} data-scrollspy-target className={`text-2xl font-[650] text-slate-800 scroll-mt-24 dark:text-slate-200`}>
               Install the client library for your language
             </h2>
             <p>
@@ -114,7 +115,7 @@ export function GuidesContent() {
           <div className={`space-y-4`}>
             {/* HTML Bookmark */}
             {/* The data-scrollspy-target attribute makes the scrollspy work */}
-            <h2 id={`api-call`} data-scrollspy-target className={`h4 text-slate-800 scroll-mt-24 dark:text-slate-200`}>
+            <h2 id={`api-call`} data-scrollspy-target className={`text-2xl font-[650] text-slate-800 scroll-mt-24 dark:text-slate-200`}>
               Make your first API call
             </h2>
             <p>
@@ -162,7 +163,7 @@ export function GuidesContent() {
           <div className={`space-y-4`}>
             {/* HTML Bookmark */}
             {/* The data-scrollspy-target attribute makes the scrollspy work */}
-            <h2 id={`config-status`} data-scrollspy-target className={`h4 text-slate-800 scroll-mt-24 dark:text-slate-200`}>
+            <h2 id={`config-status`} data-scrollspy-target className={`text-2xl font-[650] text-slate-800 scroll-mt-24 dark:text-slate-200`}>
               Configuration status
             </h2>
             <p>

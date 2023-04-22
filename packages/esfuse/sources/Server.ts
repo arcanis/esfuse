@@ -173,7 +173,7 @@ export class Server {
         src: `/_dev/internal/runtime/hmr`,
       }));
 
-      const tailwindPath = await this.project.tailwind.find(script ?? template);
+      const tailwindPath = await this.project.tailwind.find(path.join(this.project.root, this.server.pageFolder));
       if (tailwindPath) {
         head.childNodes.push(new Element(`script`, {
           defer: `true`,

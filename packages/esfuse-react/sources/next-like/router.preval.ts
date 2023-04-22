@@ -29,16 +29,16 @@ function findLayoutForPage(p: string): number | null {
   return parentLayout;
 }
 
-const applyLayout = (layout: number | null, inner: string) => layout !== null
-  ? `<Layout_${layout}>${inner}</Layout_${layout}>`
-  : inner;
+const applyLayout = (layout: number | null, props: string) => layout !== null
+  ? `<Layout_${layout} ${props}/>`
+  : `<DefaultLayout ${props}/>`;
 
 const makePage = (page: number, layout: number | null, info: ReturnType<typeof routeUtils[`serializeToReact`]>) => `{
   path: ${JSON.stringify(info.pattern)},
   errorElement: <ErrorPage/>,
-  element: <RouteParams required={${JSON.stringify(info.required)}} splat={${JSON.stringify(info.splat)}}>
-    ${applyLayout(layout, `{React.createElement(Page_${page})}`)}
-  </RouteParams>,
+  lazy: wrapLazy(Page_${page}, (route, children) => <RouteParams required={${JSON.stringify(info.required)}} splat={${JSON.stringify(info.splat)}}>
+    ${applyLayout(layout, `route={route} children={children}`)}
+  </RouteParams>),
 }`;
 
 const layoutCodeSegment = layouts.map((p, index) => `
@@ -46,7 +46,7 @@ import {Layout as Layout_${index}} from ${JSON.stringify(path.join(project.root,
 `.trimStart()).join(``);
 
 const pageCodeSegment = pages.map((p, index) => `
-const Page_${index} = React.lazy(() => import(${JSON.stringify(path.join(project.root, appFolder, p))}));
+const Page_${index} = () => import(${JSON.stringify(path.join(project.root, appFolder, p))});
 `.trimStart()).join(``);
 
 const routeCodeSegment = pages.map((p, index) => {
@@ -66,7 +66,24 @@ ${layoutCodeSegment.trimEnd()}
 
 ${pageCodeSegment.trimEnd()}
 
+function DefaultLayout({children}) {
+  return <>{children}</>;
+}
+
+function wrapLazy(lazy, wrapper) {
+  return async () => {
+    const routeModule = await lazy();
+    const Page = routeModule.Page ?? routeModule.default;
+
+    return {
+      loader: routeModule.loader,
+      element: wrapper(routeModule, routeModule.element ?? <Page/>),
+    };
+  };
+}
+
 const router = createBrowserRouter([${routeCodeSegment}]);
+console.log('router', [${routeCodeSegment}])
 
 export function withRouter() {
   return () => (

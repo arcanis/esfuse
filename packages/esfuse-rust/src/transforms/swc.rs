@@ -78,8 +78,6 @@ pub fn transform_swc(_project: &Project, fetch_data: OnFetchResultData, args: On
           ..Default::default()
         }));
 
-        println!("{:?}", &swc_config.config.jsc.transform.as_ref().unwrap().react);
-
         let program = c.parse_js(
           file.clone(),
           &handler,

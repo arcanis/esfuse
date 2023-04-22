@@ -118,7 +118,6 @@ impl AsRef<str> for CompilationError {
 
 impl CompilationError {
   pub fn from_napi(err: napi::Error) -> Self {
-    println!("{:?}", err);
     Self::from_str(&err.reason)
   }
 

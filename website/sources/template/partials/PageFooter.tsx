@@ -1,6 +1,6 @@
 import {Link} from 'react-router-dom';
 import React  from 'react';
-import Logo   from 'website/sources/template/images/Logo.svg';
+import Logo   from 'website/sources/template/images/Logo.svg?transform=url';
 
 export function PageFooter() {
   return (

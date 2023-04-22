@@ -5,7 +5,7 @@ export function HelpContent() {
   return (
     <div>
       <header className={`mb-8`}>
-        <h1 className={`h2 text-slate-800 mb-4 dark:text-slate-200`}>How can we help?</h1>
+        <h1 className={`text-4xl font-[650] text-slate-800 mb-4 dark:text-slate-200`}>How can we help?</h1>
         <p className={`text-lg text-slate-600 dark:text-slate-400`}>
           Everything you need to know right here at your fingertips. Ask questions, browse around for answers, or submit your feature requests.
         </p>
@@ -16,7 +16,7 @@ export function HelpContent() {
           <section className={`space-y-4`}>
             {/* HTML Bookmark */}
             {/* The data-scrollspy-target attribute makes the scrollspy work */}
-            <h2 id={`overview`} data-scrollspy-target className={`h4 text-slate-800 scroll-mt-24 dark:text-slate-200`}>
+            <h2 id={`overview`} data-scrollspy-target className={`text-2xl font-[650] text-slate-800 scroll-mt-24 dark:text-slate-200`}>
               Overview
             </h2>
             <ul className={`space-y-3`}>
@@ -50,7 +50,7 @@ export function HelpContent() {
           <section className={`space-y-4`}>
             {/* HTML Bookmark */}
             {/* The data-scrollspy-target attribute makes the scrollspy work */}
-            <h2 id={`support`} data-scrollspy-target className={`h4 text-slate-800 scroll-mt-24 dark:text-slate-200`}>
+            <h2 id={`support`} data-scrollspy-target className={`text-2xl font-[650] text-slate-800 scroll-mt-24 dark:text-slate-200`}>
               Support
             </h2>
             <ul className={`space-y-3`}>
@@ -84,7 +84,7 @@ export function HelpContent() {
           <section className={`space-y-4`}>
             {/* HTML Bookmark */}
             {/* The data-scrollspy-target attribute makes the scrollspy work */}
-            <h2 id={`security`} data-scrollspy-target className={`h4 text-slate-800 scroll-mt-24 dark:text-slate-200`}>
+            <h2 id={`security`} data-scrollspy-target className={`text-2xl font-[650] text-slate-800 scroll-mt-24 dark:text-slate-200`}>
               Security &amp; Privacy
             </h2>
             <ul className={`space-y-3`}>
@@ -112,7 +112,7 @@ export function HelpContent() {
           <section className={`space-y-4`}>
             {/* HTML Bookmark */}
             {/* The data-scrollspy-target attribute makes the scrollspy work */}
-            <h2 id={`troubleshooting`} data-scrollspy-target className={`h4 text-slate-800 scroll-mt-24 dark:text-slate-200`}>
+            <h2 id={`troubleshooting`} data-scrollspy-target className={`text-2xl font-[650] text-slate-800 scroll-mt-24 dark:text-slate-200`}>
               Troubleshooting
             </h2>
             <ul className={`space-y-3`}>

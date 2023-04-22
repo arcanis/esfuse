@@ -1,7 +1,7 @@
 import {Link}            from 'react-router-dom';
 import React, {useState} from 'react';
 import {useDarkMode}     from 'website/sources/template/hooks/useDarkMode';
-import Logo              from 'website/sources/template/images/Logo.svg';
+import Logo              from 'website/sources/template/images/Logo.svg?transform=url';
 import {ModalSearch}     from 'website/sources/template/partials/ModalSearch';
 
 export function Header() {
@@ -55,7 +55,7 @@ export function Header() {
             {/* Right side elements links */}
             <ul className={`flex grow justify-end flex-wrap items-center`}>
               <li className={`ml-4`}>
-                <a className={`btn-sm inline-flex items-center text-slate-100 bg-blue-600 hover:bg-blue-700 shadow-sm`} href={`#0`}>
+                <a className={`px-3 py-2 text-sm font-[500] inline-flex items-center justify-center rounded-full leading-5 whitespace-nowrap transition duration-150 ease-in-out inline-flex items-center text-slate-100 bg-blue-600 hover:bg-blue-700 shadow-sm`} href={`#0`}>
                   Support
                 </a>
               </li>

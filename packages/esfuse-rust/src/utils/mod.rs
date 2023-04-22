@@ -12,6 +12,14 @@ use crate::{types::*, CompilationError};
 
 pub type BoxedFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
 
+pub fn to_slug(str: &str) -> String {
+  lazy_static! {
+    static ref RE: Regex = Regex::new(r"[^a-z0-9]+").unwrap();
+  }
+
+  RE.replace_all(&str.to_lowercase(), "-").into_owned()
+}
+
 pub fn get_extension<P: AsRef<str>>(str: P) -> String {
   lazy_static! {
     static ref RE: Regex = Regex::new(r"(?<!^|[\/])(\.[^.]+)$").unwrap();
@@ -46,6 +54,18 @@ pub fn get_mime_from_ext(ext: &str) -> &str {
 
     ".wasm" => {
       "application/wasm"
+    }
+
+    ".png" => {
+      "image/png"
+    }
+
+    ".jpg" => {
+      "image/jpeg"
+    }
+
+    ".svg" => {
+      "image/svg+xml"
     }
 
     _ => {

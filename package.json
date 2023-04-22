@@ -18,8 +18,8 @@
     "typescript": "^5.0.2"
   },
   "scripts": {
-    "dev": "RUST_BACKTRACE=1 yarn node --watch -r ./register.js ./packages/esfuse/sources/bin.ts dev",
-    "esfuse": "RUST_BACKTRACE=1 yarn node -r ./register.js ./packages/esfuse/sources/bin.ts"
+    "dev": "RUST_BACKTRACE=1 yarn node --watch --enable-source-maps -r ./register.js ./packages/esfuse/sources/bin.ts dev",
+    "esfuse": "RUST_BACKTRACE=1 yarn node --enable-source-maps -r ./register.js ./packages/esfuse/sources/bin.ts"
   },
   "resolutions": {
     "source-map@^0.7.4": "patch:source-map@npm%3A0.7.4#./.yarn/patches/source-map-npm-0.7.4-bc8d018ab6.patch"

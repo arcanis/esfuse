@@ -1,4 +1,4 @@
-import 'website/sources/template/css/additional-styles/custom-fonts';
+import 'website/sources/template/css/additional-styles/custom-fonts.css';
 import 'website/sources/template/css/additional-styles/range-slider.css';
 import 'website/sources/template/css/additional-styles/theme.css';
 import 'website/sources/template/css/additional-styles/toggle-switch.css';
