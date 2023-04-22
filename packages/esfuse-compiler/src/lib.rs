@@ -75,17 +75,27 @@ impl ProjectHandle {
   #[napi]
   pub fn get_path_from_locator(&self, req: GetFromLocatorRequest) -> Option<String> {
     req.locator.physical_path(&self.project)
-      .map(|path| path.to_string_lossy().to_string())
+      .map(|path| path.to_string_lossy().into_owned())
   }
 
   #[napi]
-  pub fn get_locator_from_path(&self, req: GetFromPathRequest) -> Option<esfuse::types::ModuleLocator> {
-    self.project.locator_from_path(&PathBuf::from(req.path), &vec![])
+  pub fn get_locator_from_path(&self, path: String) -> Option<esfuse::types::ModuleLocator> {
+    self.project.locator_from_path(&PathBuf::from(path), &vec![])
   }
 
   #[napi]
-  pub fn get_locator_from_url(&self, req: GetFromUrlRequest) -> Option<esfuse::types::ModuleLocator> {
-    esfuse::types::ModuleLocator::from_url(&req.url)
+  pub fn get_locator_from_url(&self, url: String) -> Option<esfuse::types::ModuleLocator> {
+    esfuse::types::ModuleLocator::from_url(&url)
+  }
+
+  #[napi]
+  pub fn get_ns_qualified_from_path(&self, path: String) -> Option<String> {
+    self.project.ns_qualified_from_path(&PathBuf::from(&path))
+  }
+
+  #[napi]
+  pub fn get_path_from_ns_qualified(&self, str: String) -> String {
+    self.project.path_from_ns_qualified(&str).to_string_lossy().into_owned()
   }
 
   #[napi]

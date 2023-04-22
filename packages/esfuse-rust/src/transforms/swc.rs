@@ -113,10 +113,11 @@ pub fn transform_swc(_project: &Project, fetch_data: OnFetchResultData, args: On
           code: output.code,
           map: output.map,
     
-          imports: transform_after.imports.into_iter().map(|(import, swc_span)| {
-            super::ExtractedImport {
-              specifier: import,
-              span: Span::from_swc(&swc_span, &cm),
+          imports: transform_after.imports.into_iter().map(|import_swc| {
+            Import {
+              kind: import_swc.kind,
+              specifier: import_swc.specifier,
+              span: Span::from_swc(&import_swc.span, &cm),
             }
           }).collect(),
         }),

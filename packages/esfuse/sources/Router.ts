@@ -16,6 +16,9 @@ export class Router {
   }
 
   async init() {
+    if (this.server.pageFolder === null)
+      return;
+
     const pageFolder = path.join(this.project.root, this.server.pageFolder);
 
     const relPaths = await this.project.glob(`**/index.*`, {

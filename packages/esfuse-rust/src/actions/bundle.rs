@@ -164,6 +164,7 @@ pub async fn bundle(project_base: Arc<Project>, args: OnBundleArgs) -> OnBundleR
   
       for import in &transform.imports {
         let mut resolution = super::resolve::resolve(&project, OnResolveArgs {
+          kind: import.kind,
           request: import.specifier.clone(),
           issuer: Some(msg.locator.clone()),
           span: Some(import.span.clone()),

@@ -11,6 +11,13 @@ use crate::Project;
 use crate::transforms::OnTransformSwcOpts;
 use crate::utils;
 
+#[derive(Debug)]
+#[napi]
+pub enum ResolutionKind {
+  ImportDeclaration,
+  DynamicImport,
+}
+
 #[derive(Debug, Default, Clone)]
 #[napi(object)]
 pub struct OnResolveOpts {
@@ -21,6 +28,7 @@ pub struct OnResolveOpts {
 #[derive(Debug, Clone)]
 #[napi(object)]
 pub struct OnResolveArgs {
+  pub kind: ResolutionKind,
   pub request: String,
   pub issuer: Option<ModuleLocator>,
   pub span: Option<Span>,
@@ -81,8 +89,16 @@ pub struct OnTransformArgs {
 }
 
 #[derive(Debug, Clone)]
+pub struct ImportSwc {
+  pub kind: ResolutionKind,
+  pub specifier: String,
+  pub span: swc_common::Span,
+}
+
+#[derive(Debug, Clone)]
 #[napi(object)]
-pub struct ExtractedImport {
+pub struct Import {
+  pub kind: ResolutionKind,
   pub specifier: String,
   pub span: Span,
 }
@@ -95,7 +111,7 @@ pub struct OnTransformResultData {
   pub code: String,
   pub map: Option<String>,
 
-  pub imports: Vec<ExtractedImport>,
+  pub imports: Vec<Import>,
 }
 
 #[derive(Debug, Clone)]
@@ -276,24 +292,10 @@ impl ModuleLocator {
   pub fn physical_path(&self, project: &Project) -> Option<PathBuf> {
     match self.kind {
       ModuleLocatorKind::File => {
-        let (ns, pathname) = parse_file_pathname(&self.specifier);
-        Some(project.root_ns(ns).join(pathname))
+        Some(project.path_from_ns_qualified(&self.specifier))
       },
 
       _ => None,
     }
   }
-}
-
-fn parse_file_pathname(str: &String) -> (&str, &str) {
-  lazy_static! {
-    static ref RE: Regex = Regex::new(r"^([^/?]+)/(.*)$").unwrap();
-  }
-
-  let captures = RE.captures(str.as_ref()).unwrap().unwrap();
-
-  let ns = captures.get(1).unwrap();
-  let pathname = captures.get(2).unwrap();
-
-  (ns.as_str(), pathname.as_str())
 }

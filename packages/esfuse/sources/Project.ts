@@ -22,6 +22,7 @@ import {
   OnResolveArgs,
   OnTransformOpts,
   ProjectHandle,
+  ResolutionKind,
   ResolveResult,
 } from '@esfuse/compiler';
 
@@ -186,19 +187,16 @@ export class Project {
   }
 
   locatorFromPath(path: string) {
-    return this.handle.getLocatorFromPath({
-      path,
-    });
+    return this.handle.getLocatorFromPath(path);
   }
 
   locatorFromUrl(url: string) {
-    return this.handle.getLocatorFromUrl({
-      url,
-    });
+    return this.handle.getLocatorFromUrl(url);
   }
 
   async resolveToPath(request: string, issuer?: ModuleLocator) {
     return extractResult(await this.handle.resolve({
+      kind: ResolutionKind.ImportDeclaration,
       request,
       issuer,
       opts: {
@@ -231,13 +229,12 @@ export class Project {
     return this.transform(locator, opts);
   }
 
-  async run(locator: ModuleLocator, opts: {userData?: any} = {}): Promise<unknown> {
+  async run(locator: ModuleLocator, opts: {userData?: any, contextify?: (ctx: any) => void} = {}): Promise<unknown> {
     const res = await this.bundle(locator, {
       promisifyEntryPoint: true,
       requireOnLoad: true,
-      runtime: this.locatorFromPath(require.resolve(`./runtimes/base.ts`))!,
       traverseVendors: false,
-      userData: opts.userData,
+      userData: opts.userData ?? {},
     });
 
     if (res.value!.mimeType !== `text/javascript`)
@@ -254,6 +251,8 @@ export class Project {
     ctx.exports = {};
     ctx.module = {exports: ctx.exports};
     ctx.require = createRequire(__filename);
+
+    opts.contextify?.(ctx);
 
     vm.runInContext(res.value!.code, ctx);
 
@@ -335,6 +334,7 @@ export class Project {
         onlyEntryPoint: false,
         promisifyEntryPoint: false,
         requireOnLoad: false,
+        runtime: this.locatorFromPath(require.resolve(`./runtimes/base.ts`))!,
         traverseVendors: true,
         userData: {},
         ...opts,
@@ -361,30 +361,27 @@ export class Project {
       };
     }
 
+    const dynamicType = args.kind === ResolutionKind.DynamicImport
+      ? `lazy`
+      : `eager`;
+
+    const absoluteDynamicTarget = path.resolve(path.dirname(issuerPath), args.request);
+    const nsQualifiedDynamicTarget = this.handle.getNsQualifiedFromPath(absoluteDynamicTarget)!;
+
     return {
       value: {
-        locator: this.locatorFromUrl(path.posix.join(`/_dev/internal/dynamic`, path.resolve(path.dirname(issuerPath), args.request)))!,
+        locator: this.locatorFromUrl(path.posix.join(`/_dev/internal`, dynamicType, nsQualifiedDynamicTarget))!,
       },
       dependencies: [],
     };
   }
 
   private async onDynamicFetch(args: OnFetchArgs): Promise<FetchResult> {
-    if (!args.locator.specifier.startsWith(`dynamic/`)) {
-      return {
-        error: {
-          diagnostics: [{
-            message: `Invalid locator provided to the dynamic fetcher`,
-            highlights: [],
-          }],
-        },
-        dependencies: [],
-      };
-    }
+    const firstSegmentIndex = args.locator.specifier.indexOf(`/`);
+    const dynamicType = args.locator.specifier.slice(0, firstSegmentIndex);
 
-    const specifier = args.locator.specifier.replace(/^dynamic/, ``);
-
-    const eager = true;
+    const specifier = this.handle.getPathFromNsQualified(args.locator.specifier.slice(firstSegmentIndex + 1))!;
+    const eager = dynamicType === `eager`;
 
     // Used to query the entries from the filesystem
     let globPattern = ``;
@@ -407,9 +404,9 @@ export class Project {
       if (isFirstMatch) {
         const slashIndex = prefix.lastIndexOf(`/`);
         const [left, right] =
-            slashIndex !== -1
-              ? [prefix.slice(0, slashIndex), prefix.slice(slashIndex + 1)]
-              : [``, prefix];
+          slashIndex !== -1
+            ? [prefix.slice(0, slashIndex), prefix.slice(slashIndex + 1)]
+            : [``, prefix];
 
         resolvedRelativeTo = path.resolve(resolvedRelativeTo, left);
 

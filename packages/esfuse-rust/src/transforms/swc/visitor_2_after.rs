@@ -6,11 +6,14 @@ use swc_core::ecma::visit::{VisitMut, VisitMutWith};
 
 use swc_core::{quote_expr};
 
+use crate::types::*;
+
 use super::OnTransformSwcOpts;
+
 pub struct TransformVisitor<'a> {
   pub opts: &'a OnTransformSwcOpts,
   pub url: String,
-  pub imports: Vec<(String, swc_common::Span)>,
+  pub imports: Vec<ImportSwc>,
 }
 
 fn interlace_vectors<T>(vec1: Vec<T>, vec2: Vec<T>) -> Vec<T> where T: Clone {
@@ -38,13 +41,17 @@ fn interlace_vectors<T>(vec1: Vec<T>, vec2: Vec<T>) -> Vec<T> where T: Clone {
 }
 
 impl<'a> TransformVisitor<'a> {
-  fn register_import(&mut self, expr: &ast::Expr) {
+  fn register_import(&mut self, kind: ResolutionKind, expr: &ast::Expr) {
     match expr {
       ast::Expr::Lit(ast::Lit::Str(lit_str)) => {
         let import = lit_str.value.to_string();
         let span = lit_str.span;
         
-        self.imports.push((import, span));
+        self.imports.push(ImportSwc {
+          kind,
+          specifier: import,
+          span,
+        });
       }
 
       ast::Expr::Tpl(tpl) => {
@@ -55,7 +62,11 @@ impl<'a> TransformVisitor<'a> {
           let quasi_value = first_quasi.cooked.as_ref()
             .expect("Should have a cooked value");
           
-          self.imports.push((quasi_value.to_string(), tpl.span));
+          self.imports.push(ImportSwc {
+            kind,
+            specifier: quasi_value.to_string(),
+            span: tpl.span,
+          });
         }
       }
 
@@ -197,14 +208,14 @@ impl<'a> VisitMut for TransformVisitor<'a> {
     e.visit_mut_children_with(self);
 
     if e.callee.is_import() {
-      self.register_import(&e.args[0].expr);
+      self.register_import(ResolutionKind::DynamicImport, &e.args[0].expr);
       e.callee = ast::Callee::Expr(quote_expr!("require.import"));
     }
 
     if let ast::Callee::Expr(callee) = &e.callee {
       if let ast::Expr::Ident(callee_ident) = &**callee {
         if callee_ident.sym.to_string() == "require" {
-          self.register_import(&e.args[0].expr);
+          self.register_import(ResolutionKind::ImportDeclaration, &e.args[0].expr);
         }
       }
     }

@@ -1,3 +1,5 @@
+use fancy_regex::Regex;
+use lazy_static::lazy_static;
 use parcel_resolver::CacheCow;
 use path_slash::PathBufExt;
 use pathdiff::diff_paths;
@@ -94,20 +96,42 @@ impl Project {
   }
 
   pub fn locator_from_path(&self, p: &Path, params: &[StringKeyValue]) -> Option<ModuleLocator> {
-    if let Some(base) = self.path_to_ns.get_ancestor_record(&p) {
+    self.ns_qualified_from_path(p).map(|specifier| {
+      ModuleLocator::new(
+        ModuleLocatorKind::File,
+        specifier,
+        params.to_vec(),
+      )
+    })
+  }
+
+  pub fn ns_qualified_from_path(&self, p: &Path) -> Option<String> {
+    self.path_to_ns.get_ancestor_record(&p).map(|base| {
       let p_rel = diff_paths(p, base.1).unwrap();
 
       let pathname = clean_path::clean(p_rel)
         .to_slash_lossy()
         .to_string();
-  
-      Some(ModuleLocator::new(
-        ModuleLocatorKind::File,
-        format!("{}/{}", base.2, pathname),
-        params.to_vec(),
-      ))
-    } else {
-      None
-    }
+
+      format!("{}/{}", base.2, pathname)
+    })
   }
+
+  pub fn path_from_ns_qualified(&self, str: &str) -> PathBuf {
+    let (ns, pathname) = parse_file_pathname(&str);
+    self.root_ns(ns).join(pathname)
+  }
+}
+
+fn parse_file_pathname(str: &str) -> (&str, &str) {
+  lazy_static! {
+    static ref RE: Regex = Regex::new(r"^([^/?]+)/(.*)$").unwrap();
+  }
+
+  let captures = RE.captures(str.as_ref()).unwrap().unwrap();
+
+  let ns = captures.get(1).unwrap();
+  let pathname = captures.get(2).unwrap();
+
+  (ns.as_str(), pathname.as_str())
 }

@@ -1,0 +1,6 @@
+{
+  "name": "package-esm-one-esm-dep",
+  "dependencies": {
+    "package-esm-no-deps": "workspace:*"
+  }
+}

@@ -9,9 +9,7 @@ const handler = ProjectHandle.create({
 });
 
 addHook((code, path) => {
-  const locator = handler.getLocatorFromPath({
-    path,
-  });
+  const locator = handler.getLocatorFromPath(path);
 
   const result = handler.transformNoHooks({
     locator,

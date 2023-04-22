@@ -1,0 +1,6 @@
+{
+  "name": "package-esm-one-cjs-dep",
+  "dependencies": {
+    "package-cjs-no-deps": "workspace:*"
+  }
+}

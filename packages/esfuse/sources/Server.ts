@@ -173,12 +173,14 @@ export class Server {
         src: `/_dev/internal/runtime/hmr`,
       }));
 
-      const tailwindPath = await this.project.tailwind.find(path.join(this.project.root, this.server.pageFolder));
-      if (tailwindPath) {
-        head.childNodes.push(new Element(`script`, {
-          defer: `true`,
-          src: path.posix.join(`/_dev/internal/tailwind`, tailwindPath),
-        }));
+      if (this.server.pageFolder !== null) {
+        const tailwindPath = await this.project.tailwind.find(path.join(this.project.root, this.server.pageFolder));
+        if (tailwindPath) {
+          head.childNodes.push(new Element(`script`, {
+            defer: `true`,
+            src: path.posix.join(`/_dev/internal/tailwind`, tailwindPath),
+          }));
+        }
       }
 
       if (scriptLocator) {
