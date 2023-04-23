@@ -1,7 +1,5 @@
-name: Rust
+name: Esfuse CI
 env:
-  DEBUG: napi:*
-  APP_NAME: compiler
   MACOSX_DEPLOYMENT_TARGET: '10.13'
 
 on:
@@ -102,11 +100,11 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: bindings-${{matrix.settings.target}}
-          path: packages/esfuse-compiler/${{env.APP_NAME}}.*.node
+          path: packages/esfuse-compiler/compiler.*.node
           if-no-files-found: error
 
-  compiler-tests:
-    name: Compiler test - node@${{matrix.node}}
+  tests:
+    name: Test - node@${{matrix.node}}
     needs:
       - compiler-build
     strategy:
@@ -135,15 +133,15 @@ jobs:
       - name: List packages
         run: ls -R .
         shell: bash
-      - name: Test bindings
-        run: yarn packages/esfuse-compiler test
+      - name: Test esfuse
+        run: yarn esfuse test
 
-  compiler-publish:
-    name: Compiler publish
+  publish:
+    name: Publish
     runs-on: ubuntu-latest
     environment: npm
     needs:
-      - compiler-tests
+      - tests
     steps:
       - uses: actions/checkout@v3
       - name: Setup node
@@ -166,10 +164,12 @@ jobs:
           then
             yarn packages/esfuse-compiler prepublishOnly
             yarn packages/esfuse-compiler npm publish --access public
+            yarn packages/esfuse npm publish
           elif git log -1 --pretty=%B | grep "^[0-9]\+\.[0-9]\+\.[0-9]\+";
           then
             yarn packages/esfuse-compiler prepublishOnly
             yarn packages/esfuse-compiler npm publish --access public --tag next
+            yarn packages/esfuse npm publish --tag next
           else
             echo "Not a release, skipping publish"
           fi
