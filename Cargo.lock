@@ -1327,7 +1327,7 @@ dependencies = [
 [[package]]
 name = "napi-build"
 version = "2.0.1"
-source = "git+https://github.com/napi-rs/napi-rs.git?branch=reexport-types-from-shared-crate#c74ae9b25f3eacf875d02fcb2444cb32f2f654b7"
+source = "git+https://github.com/arcanis/napi-rs.git?branch=mael/napi-generic-types#13f449f68b65d2f705cfbc90daf67a498eae3ea7"
 
 [[package]]
 name = "napi-derive"
