@@ -100,7 +100,9 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: bindings-${{matrix.settings.target}}
-          path: packages/esfuse-compiler/compiler.*.node
+          path: |
+            packages/esfuse-compiler/compiler.*.node
+            packages/esfuse-compiler/index.*
           if-no-files-found: error
 
   tests:
