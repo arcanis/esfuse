@@ -7,12 +7,15 @@ version = "0.0.0"
 crate-type = ["cdylib"]
 
 [dependencies]
+#napi-derive = { "path" = "/Users/mael.nison/napi-rs/crates/macro" }
+#napi = { "path" = "/Users/mael.nison/napi-rs/crates/napi", default-features = false, features = ["napi4", "serde-json", "tokio_rt"] }
+napi-derive = { git = "https://github.com/arcanis/napi-rs.git", branch = "mael/napi-generic-types" }
+napi = { git = "https://github.com/arcanis/napi-rs.git", branch = "mael/napi-generic-types", default-features = false, features = ["napi4", "serde-json", "tokio_rt"] }
+#napi-derive = "2.12.3"
+#napi = { version = "2.12.4", default-features = false, features = ["napi4", "serde-json", "tokio_rt"] }
+
 esfuse = { path = "../esfuse-rust" }
 glob-match = "0.2.1"
-napi = { "path" = "/Users/mael.nison/napi-rs/crates/napi", default-features = false, features = ["napi4", "serde-json", "tokio_rt"] }
-napi-derive = { "path" = "/Users/mael.nison/napi-rs/crates/macro" }
-#napi = { version = "2.12.4", default-features = false, features = ["napi4", "serde-json", "tokio_rt"] }
-#napi-derive = "2.12.3"
 serde = "1.0.157"
 serde_json = "1.0.94"
 
