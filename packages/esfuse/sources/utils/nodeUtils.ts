@@ -1,6 +1,7 @@
-import fs         from 'fs';
-import path       from 'path';
-import {Readable} from 'stream';
+import fs             from 'fs';
+import {escapeRegExp} from 'lodash';
+import path           from 'path';
+import {Readable}     from 'stream';
 
 export function findClosestFile(p: string, name: string) {
   let next = path.dirname(p);
@@ -32,4 +33,20 @@ export function consumeStream(stream: Readable) {
       resolve(Buffer.concat(segments));
     });
   });
+}
+
+export function getRegExpFromPath(pattern: string) {
+  const normalized = path.normalize(pattern);
+
+  const parts = normalized.split(`/`).map(segment => {
+    return segment === `{}` ? `[^\\\\/]+` : escapeRegExp(segment);
+  });
+
+  if (parts[parts.length - 1] !== ``)
+    parts.push(``);
+
+  const distFolderRegExpStr = parts.join(escapeRegExp(path.sep));
+  const distRegExp = new RegExp(`^${distFolderRegExpStr}`);
+
+  return distRegExp;
 }

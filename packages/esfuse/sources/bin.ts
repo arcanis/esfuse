@@ -1,10 +1,11 @@
-import {runExit}     from 'clipanion';
+import {runExit}      from 'clipanion';
 
-import {DevCommand}  from 'esfuse/sources/commands/dev';
-import {RunCommand}  from 'esfuse/sources/commands/run';
-import {TestCommand} from 'esfuse/sources/commands/test';
+import {BuildCommand} from 'esfuse/sources/commands/build';
+import {DevCommand}   from 'esfuse/sources/commands/dev';
+import {RunCommand}   from 'esfuse/sources/commands/run';
+import {TestCommand}  from 'esfuse/sources/commands/test';
 
 runExit({
   binaryLabel: `Esfuse`,
   binaryName: `yarn esfuse`,
-}, [DevCommand, RunCommand, TestCommand]);
+}, [BuildCommand, DevCommand, RunCommand, TestCommand]);

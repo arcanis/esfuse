@@ -2,7 +2,7 @@ pub use fancy_regex::Regex;
 pub mod errors;
 pub mod swc;
 
-use std::{pin::Pin, future::Future};
+use std::{pin::Pin, future::Future, path::{Path, PathBuf}, collections::HashMap, sync::{Arc, Mutex}};
 
 use lazy_static::lazy_static;
 use serde::Serialize;
@@ -150,4 +150,45 @@ pub fn serialize_json<T: serde::Serialize>(val: &T, subject: &String) -> Result<
     // serde_json::to_string promises that the result is always utf8
     Ok(String::from_utf8_unchecked(buf))
   }.map_err(|e| CompilationError::from_json(&e, subject.clone()))
+}
+
+pub struct FileFinder {
+    filename: String,
+    cache: Arc<Mutex<HashMap<String, Option<PathBuf>>>>,
+}
+
+impl FileFinder {
+    pub fn new<T: AsRef<str>>(filename: T) -> Self {
+      FileFinder {
+        filename: filename.as_ref().to_string(),
+        cache: Arc::new(Mutex::new(HashMap::new())),
+      }
+    }
+
+    pub fn find_file(&self, starting_directory: &Path) -> Option<PathBuf> {
+      let mut cache = self.cache.lock().unwrap();
+      let directory_str = starting_directory.to_str()?;
+
+      // Check if the result is in the cache
+      if let Some(cached_path) = cache.get(directory_str) {
+        return cached_path.clone();
+      }
+
+      let mut path: PathBuf = starting_directory.into();
+      let file = Path::new(&self.filename);
+
+      loop {
+        path.push(file);
+
+        if path.is_file() {
+          cache.insert(directory_str.to_string(), Some(path.clone())); // Cache the result
+          break Some(path);
+        }
+
+        if !(path.pop() && path.pop()) { // remove file && remove parent
+          cache.insert(directory_str.to_string(), None); // Cache the result
+          break None;
+        }
+      }
+    }
 }

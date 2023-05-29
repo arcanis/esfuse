@@ -147,3 +147,17 @@ export function withErrorLogging<T>(fn: (...args: Array<any>) => Promise<T>) {
     }
   };
 }
+
+export function cooked(strings: Array<string>, ...subs: Array<string>) {
+  return String.raw({raw: strings}, ...subs);
+}
+
+export function rethrowAllSettled(results: Array<PromiseSettledResult<any>>) {
+  const errors = results.filter((result): result is PromiseRejectedResult => {
+    return result.status === `rejected`;
+  });
+
+  if (errors.length > 0) {
+    throw errors[0].reason;
+  }
+}

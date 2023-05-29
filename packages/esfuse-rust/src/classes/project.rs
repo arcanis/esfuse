@@ -22,6 +22,8 @@ pub struct Project {
 
   pub(crate) ns_to_path: HashMap<String, PathBuf>,
   pub(crate) path_to_ns: arca::path::Trie<String>,
+
+  pub(crate) package_json_finder: utils::FileFinder,
 }
 
 impl Project {
@@ -56,6 +58,8 @@ impl Project {
 
       ns_to_path: Default::default(),
       path_to_ns: Default::default(),
+
+      package_json_finder: utils::FileFinder::new("package.json"),
     };
   
     project.register_ns("app", root);
@@ -102,6 +106,12 @@ impl Project {
         specifier,
         params.to_vec(),
       )
+    })
+  }
+
+  pub fn package_dir_from_locator(&self, locator: &ModuleLocator) -> Option<PathBuf> {
+    locator.physical_path(self).and_then(|path| {
+      self.package_json_finder.find_file(&path)
     })
   }
 

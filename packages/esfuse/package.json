@@ -20,7 +20,7 @@
     "dom-serializer": "^2.0.0",
     "domhandler": "^5.0.3",
     "expect": "^29.5.0",
-    "git-smart-project": "^1.2.3",
+    "git-smart-project": "/Users/mael.nison/git-smart-project/package.tgz",
     "htmlparser2": "^8.0.2",
     "lodash": "^4.17.21",
     "micromatch": "^4.0.5",

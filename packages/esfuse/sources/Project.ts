@@ -1,18 +1,21 @@
-import fs                      from 'fs';
-import {getFiles}              from 'git-smart-project';
-import debounce                from 'lodash/debounce';
-import mergeWith               from 'lodash/mergeWith';
-import {createRequire}         from 'module';
-import os                      from 'os';
-import path                    from 'path';
-import * as t                  from 'typanion';
-import vm                      from 'vm';
+import {UsageError}                                  from 'clipanion';
+import fs                                            from 'fs';
+import {getFiles}                                    from 'git-smart-project';
+import debounce                                      from 'lodash/debounce';
+import mergeWith                                     from 'lodash/mergeWith';
+import {castArray, escapeRegExp, mapValues, toArray} from 'lodash';
+import {createRequire}                               from 'module';
+import os                                            from 'os';
+import path                                          from 'path';
+import * as t                                        from 'typanion';
+import vm                                            from 'vm';
 
-import {Config, defaultConfig} from 'esfuse/sources/Config';
-import {Tailwind}              from 'esfuse/sources/Tailwind';
-import {Context}               from 'esfuse/sources/context';
-import * as gitUtils           from 'esfuse/sources/utils/gitUtils';
-import * as miscUtils          from 'esfuse/sources/utils/miscUtils';
+import {BuildConfig, Config, defaultConfig}          from 'esfuse/sources/Config';
+import {Tailwind}                                    from 'esfuse/sources/Tailwind';
+import {Context}                                     from 'esfuse/sources/context';
+import * as gitUtils                                 from 'esfuse/sources/utils/gitUtils';
+import * as miscUtils                                from 'esfuse/sources/utils/miscUtils';
+import * as nodeUtils                                from 'esfuse/sources/utils/nodeUtils';
 
 import {
   FetchResult,
@@ -25,6 +28,10 @@ import {
   ResolutionKind,
   ResolveResult,
 } from '@esfuse/compiler';
+
+type ExportsFieldValue =
+  | {[k: string]: ExportsFieldValue}
+  | string;
 
 export type WatchEvent = {
   changes: Map<string | ModuleLocator, `added` | `removed` | `changed`>;
@@ -162,18 +169,26 @@ export class Project {
   }
 
   async glob(opts?: GlobOptions): Promise<Array<string>>;
-  async glob(pattern: string, opts?: GlobOptions): Promise<Array<string>>;
-  async glob(arg1?: string | GlobOptions, arg2?: GlobOptions) {
-    const pattern = typeof arg1 === `string` ? arg1 : undefined;
-    const opts = (typeof arg1 === `string` ? arg2 : arg1) as GlobOptions;
+  async glob(pattern: string | Array<string>, opts?: GlobOptions): Promise<Array<string>>;
+  async glob(arg1?: string | Array<string> | GlobOptions, arg2?: GlobOptions) {
+    const patterns = typeof arg1 === `string` ? [arg1] : Array.isArray(arg1) ? [...arg1] : [];
+    const opts = (typeof arg1 === `string` || Array.isArray(arg1) ? arg2 : arg1) as GlobOptions;
 
     const {cwd = this.root, absolute = false} = opts ?? {};
 
     if (!fs.existsSync(cwd))
-      throw new Error(`Cannot glob a folder that doesn't exist`);
+      throw new Error(`Cannot glob a folder that doesn't exist (${cwd})`);
+
+    if (typeof this.config.patterns?.distFolder === `string`) {
+      const distPattern = this.config.patterns.distFolder.split(`/`)
+        .map(segment => segment === `{}` ? `*` : segment)
+        .join(`/`);
+
+      patterns.push(`:!${distPattern}`);
+    }
 
     const git = gitUtils.createGitClient(cwd);
-    const files = await getFiles(git, {pattern});
+    const files = await getFiles(git, {patterns});
 
     return absolute
       ? files.map(p => path.join(cwd, p))
@@ -229,12 +244,132 @@ export class Project {
     return this.transform(locator, opts);
   }
 
+  async build(buildName: string) {
+    if (typeof this.config.builds === `undefined` || !Object.prototype.hasOwnProperty.call(this.config.builds, buildName))
+      throw new UsageError(`No build configuration for "${buildName}"`);
+
+    const buildConfig = this.config.builds[buildName];
+
+    const distPattern = this.config.patterns?.distFolder;
+    const sourcePattern = this.config.patterns?.sourceFolder;
+    if (typeof distPattern === `undefined` || typeof sourcePattern === `undefined`)
+      throw new UsageError(`Both the sourceFolder and distFolder options must be set when using the build command`);
+
+    const distFolder = distPattern.split(`/`)
+      .map(segment => segment === `{}` ? buildName : segment)
+      .join(`/`);
+
+    const sourceFolder = sourcePattern.split(`/`)
+      .map(segment => segment === `{}` ? buildName : segment)
+      .join(`/`);
+
+    const absoluteDistFolder = path.join(this.root, distFolder);
+    const absoluteSourceFolder = path.join(this.root, sourceFolder);
+
+    let pkgJson;
+    try {
+      pkgJson = await fs.promises.readFile(path.join(absoluteSourceFolder, `package.json`), `utf8`);
+    } catch (err: any) {
+      if (err.code === `ENOENT`) {
+        throw new UsageError(`No package.json found - is the sourceFolder option well-configured?`);
+      } else {
+        throw err;
+      }
+    }
+
+    const files = await this.glob(buildConfig.include ?? [], {cwd: absoluteSourceFolder});
+    if (files.length === 0)
+      throw new UsageError(`Empty build - is the sourceFolder option well-configured?`);
+
+    const remappings = new Map<string, string>();
+
+    const x = Date.now();
+
+    miscUtils.rethrowAllSettled(await Promise.allSettled(files.map(async relativePath => {
+      const absoluteSourcePath = path.join(absoluteSourceFolder, relativePath);
+
+      const locator = this.locatorFromPath(absoluteSourcePath);
+      if (locator === null)
+        throw new Error(`Assertion failed: The locator should have been found (for ${absoluteSourcePath})`);
+
+      const analysisPass = await this.bundle(locator, {
+        onlyEntryPoint: true,
+        withMetadata: true,
+      });
+
+      const buildPass = await this.bundle(locator, {
+        onlyEntryPoint: true,
+        useEsfuseRuntime: false,
+      });
+
+      if (!buildPass.value)
+        throw buildPass.error;
+
+      if (buildPass.value.mimeType !== `text/javascript`)
+        throw new Error(`Assertion failed: Only JavaScript files can be generated (got ${buildPass.value.mimeType} for ${relativePath})`);
+
+      const {code} = buildPass.value!;
+
+      const ext = `.js`;
+      const absoluteDistPath = path.join(absoluteDistFolder, relativePath.replace(/(?<=[^/])\.[^.]+$/, ext));
+
+      await fs.promises.mkdir(path.dirname(absoluteDistPath), {recursive: true});
+      await fs.promises.writeFile(absoluteDistPath, code);
+
+      remappings.set(absoluteSourcePath, absoluteDistPath);
+    })));
+
+    const pkgJsonData = JSON.parse(pkgJson);
+
+    const traverse = (node: ExportsFieldValue) => {
+      if (typeof node !== `string`) {
+        const transformed: Record<string, ExportsFieldValue> = {};
+
+        for (const [key, value] of Object.entries(node)) {
+          const newValue = traverse(value);
+          if (newValue !== null) {
+            transformed[key] = newValue;
+          }
+        }
+
+        if (Object.keys(transformed).length > 0) {
+          return transformed;
+        } else {
+          return null;
+        }
+      } else {
+        const resolved = path.join(this.root, sourceFolder, node);
+        const remapping = remappings.get(resolved);
+
+        if (typeof remapping !== `undefined`) {
+          return `./${path.relative(absoluteDistFolder, remapping)}`;
+        } else {
+          return null;
+        }
+      }
+    };
+
+    const originalExports = pkgJsonData.exports ?? {};
+    pkgJsonData.exports = traverse(originalExports) ?? {};
+    pkgJsonData.exports[`./package.json`] = `./package.json`;
+    pkgJsonData.main = pkgJsonData.exports[`.`];
+
+    await fs.promises.writeFile(
+      path.join(this.root, distFolder, `package.json`),
+      `${JSON.stringify(pkgJsonData, null, 2)}\n`,
+    );
+  }
+
   async run(locator: ModuleLocator, opts: {userData?: any, contextify?: (ctx: any) => void} = {}): Promise<unknown> {
     const res = await this.bundle(locator, {
       promisifyEntryPoint: true,
       requireOnLoad: true,
       traverseVendors: false,
       userData: opts.userData ?? {},
+      batch: {
+        promisifyEntryPoint: true,
+        traverseVendors: false,
+      },
     });
 
     if (res.value!.mimeType !== `text/javascript`)
@@ -331,13 +466,18 @@ export class Project {
     return extractResult(await this.handle.bundle({
       locator,
       opts: {
-        onlyEntryPoint: false,
-        promisifyEntryPoint: false,
         requireOnLoad: false,
         runtime: this.locatorFromPath(require.resolve(`./runtimes/base.ts`))!,
-        traverseVendors: true,
-        userData: {},
         ...opts,
+        batch: {
+          promisifyEntryPoint: false,
+          useEsfuseRuntime: true,
+          userData: {},
+          traverseDependencies: true,
+          traverseVendors: true,
+          traversePackages: true,
+          ...opts.batch,
+        },
       },
     }));
   }

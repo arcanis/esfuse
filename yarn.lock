@@ -1527,7 +1527,7 @@ __metadata:
     dom-serializer: ^2.0.0
     domhandler: ^5.0.3
     expect: ^29.5.0
-    git-smart-project: ^1.2.3
+    git-smart-project: /Users/mael.nison/git-smart-project/package.tgz
     htmlparser2: ^8.0.2
     lodash: ^4.17.21
     micromatch: ^4.0.5
@@ -1919,12 +1919,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"git-smart-project@npm:^1.2.3":
+"git-smart-project@file:/Users/mael.nison/git-smart-project/package.tgz::locator=esfuse%40workspace%3Apackages%2Fesfuse":
   version: 1.2.3
-  resolution: "git-smart-project@npm:1.2.3"
+  resolution: "git-smart-project@file:/Users/mael.nison/git-smart-project/package.tgz::locator=esfuse%40workspace%3Apackages%2Fesfuse"
   dependencies:
     braces: ^3.0.2
-  checksum: 4bde82ee971af626203d2c9cdeb313f680751fce9402d529a3a41f7279f6cb2d223613b4e30c65125a35fe756e50077aaeb4ddb840f140a3ce07805102ab6b90
+  checksum: cfe626e025188e40694fab2954edc555d2ea7285e3594d7b1ebc708fc2d5d6f3974dc2d3aca5c3d615a88bb2a76885ec51a7c62cc58dcf7fd1c81bf23a6ae007
   languageName: node
   linkType: hard
 

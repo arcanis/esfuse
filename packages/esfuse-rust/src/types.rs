@@ -2,7 +2,9 @@ use fancy_regex::Regex;
 use lazy_static::lazy_static;
 use napi::bindgen_prelude::FromNapiValue;
 use napi::bindgen_prelude::ToNapiValue;
+use parcel_sourcemap::SourceMap;
 use serde::Serialize;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -78,6 +80,7 @@ pub struct OnFetchResult {
 #[napi(object)]
 pub struct OnTransformOpts {
   pub swc: OnTransformSwcOpts,
+  pub static_resolutions: HashMap<String, String>,
   pub user_data: Arc<serde_json::Value>,
 }
 
@@ -122,19 +125,85 @@ pub struct OnTransformResult {
 
 #[derive(Debug, Default, Clone)]
 #[napi(object)]
-pub struct OnBundleOpts {
-  pub only_entry_point: bool,
+pub struct OnBatchOpts {
   pub promisify_entry_point: bool,
+  pub use_esfuse_runtime: bool,
+  pub user_data: Arc<serde_json::Value>,
+  pub traverse_dependencies: bool,
+  pub traverse_packages: bool,
+  pub traverse_vendors: bool,
+}
+
+#[derive(Debug, Clone)]
+#[napi(object)]
+pub struct OnBatchArgs {
+  pub locators: Vec<ModuleLocator>,
+  pub opts: OnBatchOpts,
+}
+
+#[derive(Debug, Clone)]
+pub struct OnBatchModule {
+  pub locator: ModuleLocator,
+
+  pub mime_type: String,
+  pub code: String,
+
+  pub map: Option<SourceMap>,
+
+  pub newlines: usize,
+  pub resolutions: HashMap<String, Option<String>>,
+}
+
+impl OnBatchModule {
+  pub fn new(locator: ModuleLocator, transform: OnTransformResultData, resolutions: HashMap<String, Option<String>>) -> Self {
+    let map = transform.map.map(|str| {
+      parcel_sourcemap::SourceMap::from_json("/", &str)
+        .expect("Assertion failed: Expected the SWC-generated sourcemap to be readable")
+    });
+
+    let newlines = count_newlines(transform.code.as_str());
+
+    Self {
+      locator,
+      mime_type: transform.mime_type,
+      code: transform.code,
+      map,
+      newlines,
+      resolutions,
+    }
+  }
+}
+
+#[derive(Debug)]
+pub struct OnBatchModuleResult {
+  pub result: Result<OnBatchModule, CompilationError>,
+  pub dependencies: Vec<ModuleLocator>,
+}
+
+pub struct OnBatchResult {
+  pub results: HashMap<String, OnBatchModuleResult>,
+}
+
+#[derive(Debug, Default, Clone)]
+#[napi(object)]
+pub struct OnBundleOpts {
+  pub batch: OnBatchOpts,
   pub require_on_load: bool,
   pub runtime: Option<ModuleLocator>,
-  pub user_data: Arc<serde_json::Value>,
-  pub traverse_vendors: bool,
 }
 
 #[napi(object)]
 pub struct OnBundleArgs {
   pub locator: ModuleLocator,
   pub opts: OnBundleOpts,
+}
+
+#[derive(Clone, Serialize)]
+#[napi(object)]
+pub struct OnBundleModuleMeta {
+  pub error: Option<CompilationError>,
+  pub path: Option<String>,
+  pub resolutions: HashMap<String, Option<String>>,
 }
 
 #[derive(Clone)]
@@ -298,4 +367,8 @@ impl ModuleLocator {
       _ => None,
     }
   }
+}
+
+fn count_newlines(s: &str) -> usize {
+  s.as_bytes().iter().filter(|&&c| c == b'\n').count()
 }
