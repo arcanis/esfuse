@@ -14,6 +14,7 @@ addHook((code, path) => {
   const result = handler.transformNoHooks({
     locator,
     opts: {
+      staticResolutions: {},
       swc: {
         promisifyBody: false,
         useEsfuseRuntime: false,

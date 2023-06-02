@@ -1,3 +1,4 @@
+use arca::ToArcaPath;
 use parcel_resolver::{SpecifierType, ResolverError};
 
 use crate::types::*;
@@ -22,6 +23,19 @@ pub async fn resolve(project: &Project, args: OnResolveArgs) -> OnResolveResult 
 }
 
 pub fn resolve_no_hooks(project: &Project, args: OnResolveArgs) -> OnResolveResult {
+  if args.request.as_str() == "esfuse/context" {
+    let builtin_locator = ModuleLocator::new(
+      ModuleLocatorKind::External,
+      args.request,
+      vec![],
+    );
+
+    return OnResolveResult {
+      result: Ok(OnResolveResultData { locator: builtin_locator }),
+      dependencies: vec![],
+    }
+  }
+
   if let Some(locator) = project.locator(&args.request) {
     return OnResolveResult {
       result: Ok(OnResolveResultData { locator }),
@@ -31,7 +45,7 @@ pub fn resolve_no_hooks(project: &Project, args: OnResolveArgs) -> OnResolveResu
 
   let base = args.issuer.clone().and_then(|locator| {
     locator.physical_path(project)
-  }).unwrap_or_else(|| project.root.to_path_buf());
+  }).unwrap_or_else(|| project.root.as_ref().clone());
 
   let (specifier, mut request_params) = args.request.split_once('?')
     .map(|(specifier, qs)| (specifier, utils::parse_query(qs)))
@@ -42,14 +56,14 @@ pub fn resolve_no_hooks(project: &Project, args: OnResolveArgs) -> OnResolveResu
   params.append(&mut request_params);
 
   let r =
-    project.resolver.resolve(&specifier, &base, SpecifierType::Cjs);
+    project.resolver.resolve(&specifier, &base.to_path_buf(), SpecifierType::Cjs);
 
   OnResolveResult {
     result: match r.result {
       Ok((parcel_resolver::Resolution::Path(p), _)) => {
 
         Ok(OnResolveResultData {
-          locator: project.locator_from_path(&p, &params).unwrap(),
+          locator: project.locator_from_path(&p.to_arca(), &params).unwrap(),
         })
       },
 

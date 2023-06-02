@@ -126,14 +126,21 @@ var $esfuse$: EsfuseRuntime;
           if (!Object.prototype.hasOwnProperty.call($esfuse$.currentMeta, p))
             throw new Error(`Assertion failed: Cannot resolve from a module that doesn't exist`);
 
-          if (!Object.prototype.hasOwnProperty.call(moduleMeta.resolutions, request))
-            throw new Error(`Module not found: ${request}`);
+          if (request[0] !== `/`) {
+            if (!Object.prototype.hasOwnProperty.call(moduleMeta.resolutions, request))
+              throw new Error(`Module not found: ${request}`);
+
+            const resolution = moduleMeta.resolutions[request];
+            if (resolution) {
+              return resolution;
+            }
+          }
 
           const paths = moduleMeta.path
-            ? [moduleMeta.path]
+            ? [moduleMeta.path.replace(/\/[^/]+$/, ``)]
             : [];
 
-          return moduleMeta.resolutions[request] ?? require.resolve(request, {paths});
+          return require.resolve(request, {paths});
         };
 
         const requireFn = (request: string) => {

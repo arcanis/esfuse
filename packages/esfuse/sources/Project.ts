@@ -20,6 +20,7 @@ import * as nodeUtils                                from 'esfuse/sources/utils/
 import {
   FetchResult,
   ModuleLocator,
+  OnBatchOpts,
   OnBundleOpts,
   OnFetchArgs,
   OnResolveArgs,
@@ -42,14 +43,14 @@ export type GlobOptions = {
   cwd?: string;
 };
 
-export function extractResult<T, E>(res: {value?: T, error?: E}) {
-  return res as {
-    value: T;
+export function extractResult<T extends {value?: any, error?: any}>(res: T) {
+  return res as Omit<T, `value` | `error`> & ({
+    value: NonNullable<T[`value`]>;
     error: null;
   } | {
     value: null;
-    error: E;
-  };
+    error: NonNullable<T[`error`]>;
+  });
 }
 
 export class Project {
@@ -225,6 +226,7 @@ export class Project {
     return extractResult(await this.handle.transform({
       locator,
       opts: {
+        staticResolutions: {},
         userData: {},
         ...opts,
         swc: {
@@ -277,44 +279,46 @@ export class Project {
       }
     }
 
-    const files = await this.glob(buildConfig.include ?? [], {cwd: absoluteSourceFolder});
+    const files = await this.glob(buildConfig.include ?? [], {absolute: true, cwd: absoluteSourceFolder});
     if (files.length === 0)
       throw new UsageError(`Empty build - is the sourceFolder option well-configured?`);
 
+    const generation = await this.handle.batch({
+      locators: files.map(file => {
+        return this.locatorFromPath(file)!;
+      }),
+      opts: {
+        generatedModuleFolder: path.join(absoluteSourceFolder, `generated`),
+        pinResolutions: true,
+        promisifyEntryPoint: false,
+        useEsfuseRuntime: false,
+        userData: {},
+        traverseDependencies: true,
+        traverseNatives: false,
+        traversePackages: false,
+        traverseVendors: false,
+      },
+    });
+
     const remappings = new Map<string, string>();
 
-    const x = Date.now();
+    miscUtils.rethrowAllSettled(await Promise.allSettled(generation.map(async entryResult => {
+      const entry = extractResult(entryResult);
 
-    miscUtils.rethrowAllSettled(await Promise.allSettled(files.map(async relativePath => {
-      const absoluteSourcePath = path.join(absoluteSourceFolder, relativePath);
+      if (entry.error)
+        throw new Error(`Build failed for ${entry.locator.url}`);
 
-      const locator = this.locatorFromPath(absoluteSourcePath);
-      if (locator === null)
-        throw new Error(`Assertion failed: The locator should have been found (for ${absoluteSourcePath})`);
+      if (entry.value.mimeType !== `text/javascript`)
+        throw new Error(`Assertion failed: Only JavaScript files can be generated (got ${entry.value.mimeType} for ${entry.locator.url})`);
 
-      const analysisPass = await this.bundle(locator, {
-        onlyEntryPoint: true,
-        withMetadata: true,
-      });
-
-      const buildPass = await this.bundle(locator, {
-        onlyEntryPoint: true,
-        useEsfuseRuntime: false,
-      });
-
-      if (!buildPass.value)
-        throw buildPass.error;
-
-      if (buildPass.value.mimeType !== `text/javascript`)
-        throw new Error(`Assertion failed: Only JavaScript files can be generated (got ${buildPass.value.mimeType} for ${relativePath})`);
-
-      const {code} = buildPass.value!;
+      const absoluteSourcePath = entry.value.imaginaryPath!;
+      const relativeSourcePath = path.relative(absoluteSourceFolder, absoluteSourcePath);
 
       const ext = `.js`;
-      const absoluteDistPath = path.join(absoluteDistFolder, relativePath.replace(/(?<=[^/])\.[^.]+$/, ext));
+      const absoluteDistPath = path.join(absoluteDistFolder, relativeSourcePath.replace(/(?<=[^/])\.[^.]+$/, ext));
 
       await fs.promises.mkdir(path.dirname(absoluteDistPath), {recursive: true});
-      await fs.promises.writeFile(absoluteDistPath, code);
+      await fs.promises.writeFile(absoluteDistPath, entry.value.code);
 
       remappings.set(absoluteSourcePath, absoluteDistPath);
     })));
@@ -364,12 +368,9 @@ export class Project {
     const res = await this.bundle(locator, {
       promisifyEntryPoint: true,
       requireOnLoad: true,
+      traverseNatives: false,
       traverseVendors: false,
       userData: opts.userData ?? {},
-      batch: {
-        promisifyEntryPoint: true,
-        traverseVendors: false,
-      },
     });
 
     if (res.value!.mimeType !== `text/javascript`)
@@ -389,7 +390,10 @@ export class Project {
 
     opts.contextify?.(ctx);
 
-    vm.runInContext(res.value!.code, ctx);
+    const sourceMappingUrl = `data:application/json;base64,${Buffer.from(res.value!.code).toString(`base64`)}`;
+
+    const script = new vm.Script(`${res.value!.code}\n//# sourceMappingURL=${sourceMappingUrl}\n`);
+    script.runInContext(ctx);
 
     return await ctx.module.exports;
   }
@@ -462,21 +466,23 @@ export class Project {
     };
   }
 
-  async bundle(locator: ModuleLocator, opts: Partial<OnBundleOpts> = {}) {
+  async bundle(locator: ModuleLocator, opts: Partial<OnBatchOpts & OnBundleOpts> = {}) {
     return extractResult(await this.handle.bundle({
       locator,
       opts: {
         requireOnLoad: false,
-        runtime: this.locatorFromPath(require.resolve(`./runtimes/base.ts`))!,
+        runtime: this.locatorFromPath(path.join(__dirname, `runtimes/base.ts`))!,
         ...opts,
         batch: {
+          pinResolutions: false,
           promisifyEntryPoint: false,
           useEsfuseRuntime: true,
           userData: {},
           traverseDependencies: true,
+          traverseNatives: true,
           traverseVendors: true,
           traversePackages: true,
-          ...opts.batch,
+          ...opts,
         },
       },
     }));
@@ -588,7 +594,7 @@ export class Project {
     const cases = [];
 
     for (const [key, entry] of entries.entries()) {
-      const entryKey = JSON.stringify(`${entry}`/*args.suffix*/);
+      const entryKey = JSON.stringify(`${this.locatorFromPath(entry)!.url}`/*args.suffix*/);
 
       const relPath = path.relative(resolvedRelativeTo, entry);
       const matches = relPath.match(regexpPattern);

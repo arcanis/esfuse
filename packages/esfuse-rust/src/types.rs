@@ -1,3 +1,4 @@
+use arca::Path;
 use fancy_regex::Regex;
 use lazy_static::lazy_static;
 use napi::bindgen_prelude::FromNapiValue;
@@ -5,7 +6,6 @@ use napi::bindgen_prelude::ToNapiValue;
 use parcel_sourcemap::SourceMap;
 use serde::Serialize;
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::CompilationError;
@@ -96,6 +96,7 @@ pub struct ImportSwc {
   pub kind: ResolutionKind,
   pub specifier: String,
   pub span: swc_common::Span,
+  pub optional: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -104,6 +105,7 @@ pub struct Import {
   pub kind: ResolutionKind,
   pub specifier: String,
   pub span: Span,
+  pub optional: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -126,10 +128,13 @@ pub struct OnTransformResult {
 #[derive(Debug, Default, Clone)]
 #[napi(object)]
 pub struct OnBatchOpts {
+  pub generated_module_folder: Option<Path>,
+  pub pin_resolutions: bool,
   pub promisify_entry_point: bool,
   pub use_esfuse_runtime: bool,
   pub user_data: Arc<serde_json::Value>,
   pub traverse_dependencies: bool,
+  pub traverse_natives: bool,
   pub traverse_packages: bool,
   pub traverse_vendors: bool,
 }
@@ -143,39 +148,48 @@ pub struct OnBatchArgs {
 
 #[derive(Debug, Clone)]
 pub struct OnBatchModule {
-  pub locator: ModuleLocator,
+  pub imaginary_path: Option<Path>,
 
   pub mime_type: String,
   pub code: String,
 
   pub map: Option<SourceMap>,
-
   pub newlines: usize,
-  pub resolutions: HashMap<String, Option<String>>,
+  pub resolutions: HashMap<String, Option<ModuleLocator>>,
 }
 
 impl OnBatchModule {
-  pub fn new(locator: ModuleLocator, transform: OnTransformResultData, resolutions: HashMap<String, Option<String>>) -> Self {
-    let map = transform.map.map(|str| {
-      parcel_sourcemap::SourceMap::from_json("/", &str)
+  pub fn new(transform: OnTransformResultData, resolutions: HashMap<String, Option<ModuleLocator>>) -> Self {
+    let mut module = Self {
+      mime_type: transform.mime_type,
+      code: String::new(),
+      map: None,
+      newlines: 0,
+      resolutions,
+      imaginary_path: None,
+    };
+
+    module.set_code(transform.code);
+    module.set_map(transform.map);
+    module
+  }
+
+  pub fn set_code(&mut self, code: String) {
+    self.code = code;
+    self.newlines = count_newlines(&self.code);
+  }
+
+  pub fn set_map(&mut self, map_opt: Option<String>) {
+    self.map = map_opt.map(|str| {
+      parcel_sourcemap::SourceMap::from_json("/", str.as_ref())
         .expect("Assertion failed: Expected the SWC-generated sourcemap to be readable")
     });
-
-    let newlines = count_newlines(transform.code.as_str());
-
-    Self {
-      locator,
-      mime_type: transform.mime_type,
-      code: transform.code,
-      map,
-      newlines,
-      resolutions,
-    }
   }
 }
 
 #[derive(Debug)]
 pub struct OnBatchModuleResult {
+  pub locator: ModuleLocator,
   pub result: Result<OnBatchModule, CompilationError>,
   pub dependencies: Vec<ModuleLocator>,
 }
@@ -202,7 +216,7 @@ pub struct OnBundleArgs {
 #[napi(object)]
 pub struct OnBundleModuleMeta {
   pub error: Option<CompilationError>,
-  pub path: Option<String>,
+  pub path: Option<Path>,
   pub resolutions: HashMap<String, Option<String>>,
 }
 
@@ -358,7 +372,7 @@ impl ModuleLocator {
     Self::new(self.kind, self.specifier.clone(), vec![])
   }
 
-  pub fn physical_path(&self, project: &Project) -> Option<PathBuf> {
+  pub fn physical_path(&self, project: &Project) -> Option<Path> {
     match self.kind {
       ModuleLocatorKind::File => {
         Some(project.path_from_ns_qualified(&self.specifier))

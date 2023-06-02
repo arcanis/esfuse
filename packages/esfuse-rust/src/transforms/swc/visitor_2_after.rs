@@ -7,71 +7,24 @@ use swc_core::ecma::visit::{VisitMut, VisitMutWith};
 use swc_core::{quote_expr};
 
 use crate::types::*;
+use crate::utils;
 
 use super::OnTransformSwcOpts;
-
 pub struct TransformVisitor<'a> {
   pub opts: &'a OnTransformSwcOpts,
   pub url: String,
   pub imports: Vec<ImportSwc>,
-}
-
-fn interlace_vectors<T>(vec1: Vec<T>, vec2: Vec<T>) -> Vec<T> where T: Clone {
-  let mut result: Vec<T> = Vec::new();
-
-  let length1 = vec1.len();
-  let length2 = vec2.len();
-
-  let max_length = if length1 > length2 {
-    length1
-  } else {
-    length2
-  };
-
-  for i in 0..max_length {
-    if i < length1 {
-      result.push(vec1[i].clone());
-    }
-    if i < length2 {
-      result.push(vec2[i].clone());
-    }
-  }
-
-  result
+  pub try_stack: usize,
 }
 
 impl<'a> TransformVisitor<'a> {
-  fn register_import(&mut self, kind: ResolutionKind, expr: &ast::Expr) {
-    match expr {
-      ast::Expr::Lit(ast::Lit::Str(lit_str)) => {
-        let import = lit_str.value.to_string();
-        let span = lit_str.span;
-        
-        self.imports.push(ImportSwc {
-          kind,
-          specifier: import,
-          span,
-        });
-      }
-
-      ast::Expr::Tpl(tpl) => {
-        if tpl.quasis.len() == 1 {
-          let first_quasi = tpl.quasis.first()
-            .expect("Should have a quasi");
-          
-          let quasi_value = first_quasi.cooked.as_ref()
-            .expect("Should have a cooked value");
-          
-          self.imports.push(ImportSwc {
-            kind,
-            specifier: quasi_value.to_string(),
-            span: tpl.span,
-          });
-        }
-      }
-
-      _ => {}
-    }
+  fn register_import(&mut self, kind: ResolutionKind, specifier: String, span: swc_common::Span) {
+    self.imports.push(ImportSwc {
+      kind,
+      specifier,
+      span,
+      optional: self.try_stack > 0,
+    });
   }
 }
 
@@ -171,14 +124,27 @@ impl<'a> VisitMut for TransformVisitor<'a> {
     e.body = stmts.drain(0..).map(|stmt| {
       ast::ModuleItem::Stmt(stmt)
     }).collect();
-}
+  }
+
+  fn visit_mut_try_stmt(&mut self, n: &mut ast::TryStmt) {
+    if n.handler.is_some() {
+      self.try_stack += 1;
+      n.block.visit_mut_with(self);
+      self.try_stack -= 1;
+    } else {
+      n.block.visit_mut_with(self);
+    }
+
+    n.handler.visit_mut_with(self);
+    n.finalizer.visit_mut_with(self);
+  }
 
   fn visit_mut_expr(&mut self, e: &mut ast::Expr) {
     if let Some(call) = e.as_call() {
       if call.callee.is_import() && call.args.len() == 1 {
         if let ast::Expr::Tpl(arg) = &*call.args[0].expr {
           if !arg.exprs.is_empty() {
-            let new_import_specifier = interlace_vectors(
+            let new_import_specifier = utils::interlace_vectors(
               arg.quasis.iter().map(|q| q.cooked.as_ref().map_or("".to_string(), |v| v.to_string())).collect(),
               arg.exprs.iter().enumerate().map(|(i, _q)| format!("[...t{i}]")).collect(),
             ).join("");
@@ -208,16 +174,14 @@ impl<'a> VisitMut for TransformVisitor<'a> {
     e.visit_mut_children_with(self);
 
     if e.callee.is_import() {
-      self.register_import(ResolutionKind::DynamicImport, &e.args[0].expr);
-      e.callee = ast::Callee::Expr(quote_expr!("require.import"));
+      if let Some((specifier, span)) = utils::swc::require_param_to_specifier(&e.args[0].expr) {
+        self.register_import(ResolutionKind::DynamicImport, specifier, span);
+        e.callee = ast::Callee::Expr(quote_expr!("require.import"));
+      }
     }
 
-    if let ast::Callee::Expr(callee) = &e.callee {
-      if let ast::Expr::Ident(callee_ident) = &**callee {
-        if callee_ident.sym.to_string() == "require" {
-          self.register_import(ResolutionKind::ImportDeclaration, &e.args[0].expr);
-        }
-      }
+    if let Some((_, specifier, span)) = utils::swc::require_call(e) {
+      self.register_import(ResolutionKind::ImportDeclaration, specifier, span);
     }
   }
 }

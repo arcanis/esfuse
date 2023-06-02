@@ -1,5 +1,6 @@
 extern crate queues;
 
+use itertools::Itertools;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -70,8 +71,10 @@ pub async fn bundle(project_base: Arc<Project>, args: OnBundleArgs) -> OnBundleR
 
         meta.insert(url, OnBundleModuleMeta {
           error: None,
-          path: module.locator.physical_path(project).map(|b| b.to_string_lossy().to_string()),
-          resolutions: module.resolutions,
+          path: result.locator.physical_path(project),
+          resolutions: HashMap::from_iter(module.resolutions.into_iter().map(|(k, v)| {
+            (k, v.map(|l| l.url))
+          }).collect_vec()),
         });
       },
 

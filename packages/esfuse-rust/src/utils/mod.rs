@@ -1,14 +1,15 @@
+use arca::Path;
 pub use fancy_regex::Regex;
-pub mod errors;
-pub mod swc;
-
-use std::{pin::Pin, future::Future, path::{Path, PathBuf}, collections::HashMap, sync::{Arc, Mutex}};
-
+use sha1::{Digest, Sha1};
+use std::{pin::Pin, future::Future, collections::HashMap, sync::{Arc, Mutex}};
 use lazy_static::lazy_static;
 use serde::Serialize;
 use serde_json::{Serializer, json};
 
-use crate::{types::*, CompilationError};
+use crate::{types::*, CompilationError, Project};
+
+pub mod errors;
+pub mod swc;
 
 pub type BoxedFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
 
@@ -32,6 +33,69 @@ pub fn get_extension<P: AsRef<str>>(str: P) -> String {
     .and_then(|c| c.get(1))
     .map(|m| m.as_str().to_string())
     .unwrap_or_default()
+}
+
+pub struct GetLocatorVirtualPathOpts<'a> {
+  pub mime_type: &'a str,
+  pub generated_module_folder: &'a Option<Path>,
+}
+
+pub fn get_locator_virtual_path(project: &Project, locator: &ModuleLocator, opts: GetLocatorVirtualPathOpts) -> Option<Path> {
+  let get_locator_hash_name = || {
+    let mut hasher = Sha1::new();
+    hasher.update(serde_json::to_string(&locator).unwrap().as_bytes());
+    format!("{}{}", hex::encode(hasher.finalize()), get_ext_from_mime(opts.mime_type))
+  };
+
+  let module_path = locator.physical_path(&project).map(|p| {
+    locator.params.is_empty().then(|| p.clone()).unwrap_or_else(|| {
+      p.dirname().join_str(get_locator_hash_name())
+    })
+  }).unwrap_or_else(|| {
+    opts.generated_module_folder.as_ref().unwrap().join_str(get_locator_hash_name())
+  });
+
+  Some(module_path)
+}
+
+pub fn get_ext_from_mime(ext: &str) -> &str {
+  match ext {
+    "text/javascript" => {
+      ".js"
+    }
+
+    "text/markdown" => {
+      ".mdx"
+    }
+
+    "text/css" => {
+      ".css"
+    }
+
+    "application/json" => {
+      ".json"
+    }
+
+    "application/wasm" => {
+      ".wasm"
+    }
+
+    "image/png" => {
+      ".png"
+    }
+
+    "image/jpeg" => {
+      ".jpg"
+    }
+
+    "image/svg+xml" => {
+      ".svg"
+    }
+
+    _ => {
+      ".txt"
+    }
+  }
 }
 
 pub fn get_mime_from_ext(ext: &str) -> &str {
@@ -154,7 +218,7 @@ pub fn serialize_json<T: serde::Serialize>(val: &T, subject: &String) -> Result<
 
 pub struct FileFinder {
     filename: String,
-    cache: Arc<Mutex<HashMap<String, Option<PathBuf>>>>,
+    cache: Arc<Mutex<HashMap<Path, Option<Path>>>>,
 }
 
 impl FileFinder {
@@ -165,30 +229,55 @@ impl FileFinder {
       }
     }
 
-    pub fn find_file(&self, starting_directory: &Path) -> Option<PathBuf> {
+    pub fn find_file(&self, starting_directory: &Path) -> Option<Path> {
       let mut cache = self.cache.lock().unwrap();
-      let directory_str = starting_directory.to_str()?;
 
       // Check if the result is in the cache
-      if let Some(cached_path) = cache.get(directory_str) {
+      if let Some(cached_path) = cache.get(starting_directory) {
         return cached_path.clone();
       }
 
-      let mut path: PathBuf = starting_directory.into();
-      let file = Path::new(&self.filename);
+      let mut folder_path: Path = starting_directory.clone();
+      let filename = Path::from(&self.filename);
 
       loop {
-        path.push(file);
+        let file_path = folder_path.join(&filename);
 
-        if path.is_file() {
-          cache.insert(directory_str.to_string(), Some(path.clone())); // Cache the result
-          break Some(path);
+        if file_path.to_path_buf().is_file() {
+          cache.insert(starting_directory.clone(), Some(file_path.clone()));
+          break Some(file_path);
         }
 
-        if !(path.pop() && path.pop()) { // remove file && remove parent
-          cache.insert(directory_str.to_string(), None); // Cache the result
+        if folder_path.is_root() {
+          cache.insert(starting_directory.clone(), None);
           break None;
         }
+
+        folder_path = folder_path.dirname();
       }
     }
+}
+
+pub fn interlace_vectors<T>(vec1: Vec<T>, vec2: Vec<T>) -> Vec<T> where T: Clone {
+  let mut result: Vec<T> = Vec::new();
+
+  let length1 = vec1.len();
+  let length2 = vec2.len();
+
+  let max_length = if length1 > length2 {
+    length1
+  } else {
+    length2
+  };
+
+  for i in 0..max_length {
+    if i < length1 {
+      result.push(vec1[i].clone());
+    }
+    if i < length2 {
+      result.push(vec2[i].clone());
+    }
+  }
+
+  result
 }

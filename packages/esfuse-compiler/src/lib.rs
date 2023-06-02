@@ -1,9 +1,10 @@
 #![deny(clippy::all)]
 
+use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::{path::PathBuf, collections::HashMap};
 
+use arca::Path;
 use esfuse::types::ModuleLocator;
 use napi::bindgen_prelude::*;
 use napi::threadsafe_function::{ThreadsafeFunction, ErrorStrategy};
@@ -19,8 +20,8 @@ pub struct ProjectHook {
 
 #[napi(object)]
 pub struct ProjectDefinition {
-  pub root: String,
-  pub namespaces: HashMap<String, String>,
+  pub root: Path,
+  pub namespaces: HashMap<String, Path>,
 
   pub on_resolve: Vec<ProjectHook>,
   pub on_fetch: Vec<ProjectHook>,
@@ -73,14 +74,13 @@ impl ProjectHandle {
   }
 
   #[napi]
-  pub fn get_path_from_locator(&self, req: GetFromLocatorRequest) -> Option<String> {
+  pub fn get_path_from_locator(&self, req: GetFromLocatorRequest) -> Option<Path> {
     req.locator.physical_path(&self.project)
-      .map(|path| path.to_string_lossy().into_owned())
   }
 
   #[napi]
-  pub fn get_locator_from_path(&self, path: String) -> Option<esfuse::types::ModuleLocator> {
-    self.project.locator_from_path(&PathBuf::from(path), &vec![])
+  pub fn get_locator_from_path(&self, path: Path) -> Option<esfuse::types::ModuleLocator> {
+    self.project.locator_from_path(&path, &vec![])
   }
 
   #[napi]
@@ -89,13 +89,13 @@ impl ProjectHandle {
   }
 
   #[napi]
-  pub fn get_ns_qualified_from_path(&self, path: String) -> Option<String> {
-    self.project.ns_qualified_from_path(&PathBuf::from(&path))
+  pub fn get_ns_qualified_from_path(&self, path: Path) -> Option<String> {
+    self.project.ns_qualified_from_path(&path)
   }
 
   #[napi]
-  pub fn get_path_from_ns_qualified(&self, str: String) -> String {
-    self.project.path_from_ns_qualified(&str).to_string_lossy().into_owned()
+  pub fn get_path_from_ns_qualified(&self, str: String) -> Path {
+    self.project.path_from_ns_qualified(&str)
   }
 
   #[napi]
@@ -149,14 +149,43 @@ impl ProjectHandle {
       Err(error) => BundleResult { value: None, error: Some(error), dependencies: res.dependencies },
     }
   }
+
+  #[napi]
+  pub async fn batch(&self, args: esfuse::types::OnBatchArgs) -> Vec<BatchModuleResult> {
+    let res = esfuse::actions::batch::batch(
+      self.project.clone(),
+      args,
+    ).await;
+
+    res.results.into_values().map(|res| {
+      match res.result {
+        Ok(module) => BatchModuleResult {
+          locator: res.locator,
+          value: Some(BatchModule {
+            imaginary_path: module.imaginary_path,
+            mime_type: module.mime_type,
+            code: module.code,
+            map: module.map.map(|mut source_map| source_map.to_json(None).expect("Should have been able to serialize the source map")),
+          }),
+          error: None,
+          dependencies: res.dependencies,
+        },
+        Err(error) => BatchModuleResult {
+          locator: res.locator,
+          value: None,
+          error: Some(error),
+          dependencies: res.dependencies,
+  
+        },
+      }
+    }).collect()
+  }
 }
 
 pub fn use_project(definition: ProjectDefinition) -> esfuse::Project {
-  let root = PathBuf::from(&definition.root);
-
-  let mut project = esfuse::Project::new(&root);
+  let mut project = esfuse::Project::new(&definition.root);
   for (ns, path_string) in &definition.namespaces {
-    project.register_ns(ns, &PathBuf::from(path_string));
+    project.register_ns(ns, path_string);
   }
 
   for hook in definition.on_resolve {
@@ -295,4 +324,20 @@ pub struct BundleResult {
   pub value: Option<esfuse::types::OnBundleResultData>,
   pub error: Option<esfuse::CompilationError>,
   pub dependencies: Vec<esfuse::types::ModuleLocator>,
+}
+
+#[napi(object)]
+pub struct BatchModuleResult {
+  pub locator: esfuse::types::ModuleLocator,
+  pub value: Option<BatchModule>,
+  pub error: Option<esfuse::CompilationError>,
+  pub dependencies: Vec<esfuse::types::ModuleLocator>,
+}
+
+#[napi(object)]
+pub struct BatchModule {
+  pub imaginary_path: Option<Path>,
+  pub mime_type: String,
+  pub code: String,
+  pub map: Option<String>,
 }

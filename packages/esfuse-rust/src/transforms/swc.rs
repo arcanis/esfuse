@@ -10,7 +10,6 @@ use crate::{CompilationError, Project};
 
 mod visitor_1_before;
 mod visitor_2_after;
-mod visitor_dependency_locator;
 
 #[derive(Debug, Default, Clone)]
 #[napi(object)]
@@ -30,6 +29,7 @@ pub fn transform_swc(_project: &Project, fetch_data: OnFetchResultData, args: On
     opts: &args.opts.swc,
     url: fetch_data.locator.url.clone(),
     imports: vec![],
+    try_stack: 0,
   };
 
   let error_buffer = utils::swc::ErrorBuffer::default();
@@ -115,21 +115,22 @@ pub fn transform_swc(_project: &Project, fetch_data: OnFetchResultData, args: On
       })
     })
   });
-  
+
   match transform_res {
     Ok(output) => {
       OnTransformResult {
         result: Ok(OnTransformResultData {
           mime_type: "text/javascript".to_string(),
-    
+
           code: output.code,
           map: output.map,
-    
+
           imports: transform_after.imports.into_iter().map(|import_swc| {
             Import {
               kind: import_swc.kind,
               specifier: import_swc.specifier,
               span: Span::from_swc(&import_swc.span, &cm),
+              optional: import_swc.optional,
             }
           }).collect(),
         }),

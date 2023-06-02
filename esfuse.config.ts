@@ -9,6 +9,7 @@ export const config: ConfigFn = () => ({
   builds: {
     esfuse: {
       include: [`**/*.ts`],
+      copy: [`runtimes/**/*`],
     },
   },
 

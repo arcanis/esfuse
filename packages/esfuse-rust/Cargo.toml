@@ -11,10 +11,10 @@ mdxjs = { git = "https://github.com/arcanis/mdxjs-rs.git", branch = "mael/compil
 
 #napi-derive = { "path" = "/Users/mael.nison/napi-rs/crates/macro" }
 #napi = { "path" = "/Users/mael.nison/napi-rs/crates/napi", default-features = false, features = ["napi4", "serde-json", "tokio_rt"] }
-napi-derive = { git = "https://github.com/arcanis/napi-rs.git", branch = "mael/napi-generic-types" }
-napi = { git = "https://github.com/arcanis/napi-rs.git", branch = "mael/napi-generic-types", default-features = false, features = ["napi4", "serde-json", "tokio_rt"] }
-#napi-derive = "2.12.3"
-#napi = { version = "2.12.4", default-features = false, features = ["napi4", "serde-json", "tokio_rt"] }
+#napi-derive = { git = "https://github.com/arcanis/napi-rs.git", branch = "mael/napi-generic-types" }
+#napi = { git = "https://github.com/arcanis/napi-rs.git", branch = "mael/napi-generic-types", default-features = false, features = ["napi4", "serde-json", "tokio_rt"] }
+napi-derive = "2.13.0"
+napi = { version = "2.13.1", default-features = false, features = ["napi4", "serde-json", "tokio_rt"] }
 
 #parcel-resolver = { path = "/Users/mael.nison/parcel/packages/utils/node-resolver-rs" }
 parcel-resolver = { git = "https://github.com/arcanis/parcel.git", branch = "mael/pnp" }
@@ -28,7 +28,7 @@ serde = { version = "1.0.152", features = ["derive"] }
 serde_json = "1.0.93"
 swc = "0.245.35"
 swc_common = "0.29.32"
-swc_core = { version = "0.59.40", features = ["base", "common", "ecma_ast", "ecma_parser_typescript", "ecma_visit", "ecma_transforms", "ecma_parser", "ecma_quote", "ecma_utils"] }
+swc_core = { version = "0.59.40", features = ["base", "common", "ecma_ast", "ecma_parser_typescript", "ecma_visit", "ecma_transforms", "ecma_parser", "ecma_quote", "ecma_utils", "ecma_visit_path"] }
 thiserror = "1.0.39"
 pathdiff = "0.2.1"
 path-slash = "0.2.1"
@@ -41,9 +41,12 @@ serde-querystring = "0.2.1"
 markdown = "1.0.0-alpha.7"
 serde_yaml = "0.9.19"
 urlencoding = "2.1.2"
-arca = "0.2.0"
+arca = { version = "0.3.3", features = ["napi", "serde"] }
 clippy = "0.0.302"
 lightningcss = "1.0.0-alpha.40"
 mime_guess = "2.0.4"
 tokio = { version = "1.27.0", features = ["fs", "macros", "rt-multi-thread", "rt", "sync"] }
 base64 = "0.21.0"
+itertools = "0.10.5"
+sha1 = "0.10.5"
+hex = "0.4.3"

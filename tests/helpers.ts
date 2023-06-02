@@ -1,5 +1,6 @@
 import {npath, PortablePath, ppath, xfs} from '@yarnpkg/fslib';
 import {execFile}                        from 'child_process';
+import {createRequire}                   from 'module';
 import path                              from 'path';
 import {promisify}                       from 'util';
 import vm                                from 'vm';
@@ -36,9 +37,7 @@ export async function makeAppRunner(app: Project) {
     ctx.$esfuse$ = undefined;
     ctx.exports = {};
     ctx.module = {exports: ctx.exports};
-
-    //const runtimeRes = await server.runtimeHandler({} as any, `/base`);
-    //vm.runInContext(runtimeRes.body!.toString(), ctx);
+    ctx.require = require;
 
     vm.runInContext(res.body!.toString(), ctx);
 

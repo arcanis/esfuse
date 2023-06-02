@@ -10,10 +10,10 @@ pub use self::swc::OnTransformSwcOpts;
 pub fn transform(project: &Project, fetch_data: OnFetchResultData, args: OnTransformArgs) -> OnTransformResult {
   match fetch_data.mime_type.as_str() {
     "text/css" => {
-      if fetch_data.locator.params.iter().any(|pair| pair.name == "transform" && pair.value == "js") {
-        self::css::transform_css_js(project, fetch_data, args)
-      } else {
+      if fetch_data.locator.params.iter().any(|pair| pair.name == "transform" && pair.value == "css") {
         self::css::transform_css(project, fetch_data, args)
+      } else {
+        self::css::transform_css_js(project, fetch_data, args)
       }
     }
 

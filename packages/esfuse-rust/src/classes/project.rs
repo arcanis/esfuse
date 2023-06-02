@@ -1,12 +1,9 @@
+use arca::Path;
 use fancy_regex::Regex;
 use lazy_static::lazy_static;
 use parcel_resolver::CacheCow;
-use path_slash::PathBufExt;
-use pathdiff::diff_paths;
 use std::borrow::Cow;
-use std::path::Path;
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 use crate::types::*;
 use crate::utils;
@@ -20,8 +17,8 @@ pub struct Project {
   pub(crate) resolver: parcel_resolver::Resolver<'static, parcel_resolver::OsFileSystem>,
   pub(crate) zip_cache: pnp::fs::LruZipCache<Vec<u8>>,
 
-  pub(crate) ns_to_path: HashMap<String, PathBuf>,
-  pub(crate) path_to_ns: arca::path::Trie<String>,
+  pub(crate) ns_to_path: HashMap<String, Path>,
+  pub(crate) path_to_ns: arca::Trie<String>,
 
   pub(crate) package_json_finder: utils::FileFinder,
 }
@@ -44,7 +41,7 @@ impl Project {
     let resolver_cache = parcel_resolver::Cache::new(resolver_fs);
 
     let mut project = Self {
-      root: Cow::Owned(root.to_path_buf()),
+      root: Cow::Owned(root.clone()),
 
       on_resolve: Default::default(),
       on_fetch: Default::default(),
@@ -62,24 +59,24 @@ impl Project {
       package_json_finder: utils::FileFinder::new("package.json"),
     };
   
-    project.register_ns("app", root);
+    project.register_ns("app", &root.clone());
 
     project
   }
 
-  pub fn register_ns<S: AsRef<str>, P: AsRef<Path>>(&mut self, ns: S, p: P) {
+  pub fn register_ns<S: AsRef<str>>(&mut self, ns: S, p: &Path) {
     self.ns_to_path.insert(
       ns.as_ref().to_string(),
-      p.as_ref().to_path_buf(),
+      p.clone(),
     );
 
     self.path_to_ns.insert(
-      p.as_ref(),
+      p.clone(),
       ns.as_ref().to_string(),
     );
   }
 
-  pub fn root_ns<P: AsRef<str>>(&self, ns: P) -> &PathBuf {
+  pub fn root_ns<P: AsRef<str>>(&self, ns: P) -> &Path {
     self.ns_to_path.get(ns.as_ref()).unwrap()
   }
 
@@ -93,7 +90,7 @@ impl Project {
       let params
         = query.map_or(Default::default(), utils::parse_query);
 
-      self.locator_from_path(&PathBuf::from(pathname), &params)
+      self.locator_from_path(&Path::from(pathname), &params)
     } else {
       None
     }
@@ -109,7 +106,7 @@ impl Project {
     })
   }
 
-  pub fn package_dir_from_locator(&self, locator: &ModuleLocator) -> Option<PathBuf> {
+  pub fn package_dir_from_locator(&self, locator: &ModuleLocator) -> Option<Path> {
     locator.physical_path(self).and_then(|path| {
       self.package_json_finder.find_file(&path)
     })
@@ -117,23 +114,18 @@ impl Project {
 
   pub fn ns_qualified_from_path(&self, p: &Path) -> Option<String> {
     self.path_to_ns.get_ancestor_record(&p).map(|base| {
-      let p_rel = diff_paths(p, base.1).unwrap();
-
-      let pathname = clean_path::clean(p_rel)
-        .to_slash_lossy()
-        .to_string();
-
-      format!("{}/{}", base.2, pathname)
+      let p_rel = p.relative_to(base.1);
+      format!("{}/{}", base.2, p_rel.as_str())
     })
   }
 
-  pub fn path_from_ns_qualified(&self, str: &str) -> PathBuf {
+  pub fn path_from_ns_qualified(&self, str: &str) -> Path {
     let (ns, pathname) = parse_file_pathname(&str);
-    self.root_ns(ns).join(pathname)
+    self.root_ns(ns).join(&pathname)
   }
 }
 
-fn parse_file_pathname(str: &str) -> (&str, &str) {
+fn parse_file_pathname(str: &str) -> (&str, Path) {
   lazy_static! {
     static ref RE: Regex = Regex::new(r"^([^/?]+)/(.*)$").unwrap();
   }
@@ -143,5 +135,5 @@ fn parse_file_pathname(str: &str) -> (&str, &str) {
   let ns = captures.get(1).unwrap();
   let pathname = captures.get(2).unwrap();
 
-  (ns.as_str(), pathname.as_str())
+  (ns.as_str(), Path::from(pathname.as_str()))
 }

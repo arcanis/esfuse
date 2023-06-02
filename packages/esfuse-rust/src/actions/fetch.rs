@@ -52,7 +52,7 @@ pub fn fetch_no_hooks(project: &Project, args: OnFetchArgs) -> OnFetchResult {
 
   match args.locator.physical_path(project) {
     Some(p) => {
-      let source_res = pnp::fs::vpath(p.as_ref()).and_then(|res| match &res {
+      let source_res = pnp::fs::vpath(p.to_path_buf().as_ref()).and_then(|res| match &res {
         pnp::fs::VPath::Native(p)
           => std::fs::read(p),
         pnp::fs::VPath::Virtual(info @ pnp::fs::VPathInfo { zip_path: None, .. })
